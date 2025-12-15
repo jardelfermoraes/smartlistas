@@ -21,6 +21,9 @@ lxml==5.3.0
 # Environment
 python-dotenv==1.0.1
 
+# OpenAI
+openai==1.40.6
+
 # Queue & Cache
 redis==5.0.8
 rq==1.16.2
