@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-br" ng-app="consulta-nfce-extranet-ui">
+
+<head>
+  <base href="/consulta-nfce/">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+  <link rel="shortcut icon" href="/sefa-ui/images/favicon.ico" type="image/x-icon">
+  <title>Consulta NFC-e</title>
+
+  <!-- Angular Material style sheet -->
+  <link rel="stylesheet" href="/sefa-ui/v1/css/angular-material.min.css?210920200831">
+  <link rel="stylesheet" href="/sefa-ui/v1/css/material-custom.css?210920200831">
+  <link rel="stylesheet" href="/sefa-ui/v1/css/md-data-table.css?210920200831">
+  <link rel="stylesheet" href="/sefa-ui/v1/commons/directives/topobar-extranet.css?210920200831">
+  <link rel="stylesheet" href="/sefa-ui/v1/commons/directives/menu-extranet.css?210920200831">
+  <link rel="stylesheet" href="/sefa-ui/v1/commons/directives/mdSteppers.css?210920200831">
+  <link rel="stylesheet" href="assets/css/comum.css?210920200831">
+  <link rel="stylesheet" href="assets/css/comum-altocontraste.css?210920200831">
+
+  <!-- <link rel="stylesheet" href="assets/css/jquery.mobile-1.4.5.min.css?210920200831">
+  <link rel="stylesheet" href="assets/css/nfceMob_ie.css?210920200831">
+  <link rel="stylesheet" href="assets/css/nfceMob.css?210920200831"> -->
+
+</head>
+
+<body layout="column">
+  <cabecalho-impressao></cabecalho-impressao>
+  <div class="animationload">
+    <div class="loader"></div>
+  </div>
+  <topo-bar-extranet class="non-printable"></topo-bar-extranet>
+  <div layout="column" flex>
+    <div layout="row" flex>
+      <md-sidenav layout-column class="md-sidenav-left non-printable" id="siteMenu" md-component-id="left"
+        md-is-locked-open="lockLeft && $mdMedia('gt-md')">
+        <md-content layout-fill role="navigation">
+          <menu-extranet></menu-extranet>
+        </md-content>
+      </md-sidenav>
+      <md-content layout="column" class="content-wrapper md-padding" flex layout-column id="content"
+        ng-class="{true:'overlay', false:''}[telaNivelAplicacoes]">
+        <header-print></header-print>
+        <div flex>
+          <ngbreadcrumb class="non-printable"></ngbreadcrumb>
+          <!-- Conteudo das aplicacoes -->
+          <div ng-view></div>
+        </div>
+        <painel-aplicacoes-extranet></painel-aplicacoes-extranet>
+      </md-content>
+    </div>
+  </div>
+
+  <!-- GOOGLE ANALYTICS E OUTROS -->
+  <script src="/sefa-ui/v1/js/analytics-extranet.min.js?210920200831"></script>
+
+  <!--ASSETS-->
+  
+  <script src="/sefa-ui/v1/js/jquery.min.js?210920200831"></script>
+
+  <!-- <script src="Scripts/jquery.mobile-1.4.5.min.js"></script> -->
+  <!-- <script src="Scripts/index.js"></script> -->
+  <!-- <script src="Scripts/jqueryui.js"></script> -->
+
+
+
+
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/i18n/angular-locale_pt-br.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular-route.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular-sanitize.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular-animate.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular-aria.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular-messages.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-1.5.8/angular-cookies.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/plugins/momentjs-2.12.0/moment-with-locales.min.js?210920200831"></script>
+  <script src="/sefa-ui/v1/js/angular-input-masks-standalone.min.js?040120171602"></script>
+  <script src="/sefa-ui/v1/js/ngmask.min.js?210920200831"></script>
+  <!-- Angular Material Library -->
+  <script src="/sefa-ui/v1/js/angular-material.min.js?210920200831"></script>
+
+  <!-- DataTable Material Design -->
+  <script src="/sefa-ui/v1/js/md-data-table.js?210920200831"></script>
+
+  <!--CONFIGS-->
+  <script src="assets/js/reCaptcha.js"></script>
+  <script src="config/modules.js?210920200831"></script>
+  <script src="config/routes.js?210920200831"></script>
+  <script src="config/stores.js?210920200831"></script>
+  <script src="config/events.js?210920200831"></script>
+
+  <!--INIT-->
+  <script src="init.js?210920200831"></script>
+
+  <!--FILTERS-->
+  <script src="commons/filters/mascaras.js?210920200831"></script>
+
+  <!--SERVICES-->
+  <script src="commons/services/util/textHelper.js?210920200831"></script>
+  <script src="commons/services/data/chaveService.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/services/data/toastService.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/services/data/storageService.js"></script>
+
+
+  <!--MOCK seguranca-->
+  <!-- <script src="commons/services/data/seguranca.js?210920200831"></script> -->
+  <script src="commons/services/data/usuarioService.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/services/data/seguranca.js?210920200831"></script>
+
+  <!--DIRECTIVES-->
+  <script src="/sefa-ui/v1/commons/directives/topobar-extranet.js?210920200831"></script>
+
+  <!--MOCK menu-->
+  <!-- <script src="commons/directives/menu-extranet.js?210920200831"></script> -->
+  <script src="/sefa-ui/v1/commons/directives/menu-extranet.js?210920200831"></script>
+
+  <!--MOCK painel-aplicacoes-->
+  <!-- <script src="commons/directives/painel-aplicacoes-extranet.js?210920200831"></script> -->
+  <script src="/sefa-ui/v1/commons/directives/painel-aplicacoes-extranet.js?210920200831"></script>
+
+  <script src="/sefa-ui/v1/commons/directives/ngbreadcrumb_extranet/ngbreadcrumb.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/directives/slideable.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/directives/asyncLoader.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/directives/footer.js?210920200831"></script>
+  <script src="/sefa-ui/v1/commons/directives/mdSteppers.js"></script>
+
+
+
+
+  <!-- <script src="views/homeController.js?210920200831"></script> -->
+  <!-- <script src="views/usuario/cadastroController.js?210920200831"></script> -->
+  <script src="views/resumida/resumo/resumoResumidaController.js?210920200831"></script>
+  <script src="views/resumida/qrcode/qrCodeController.js?210920200831"></script>
+  <script src="views/resumida/chave/chaveResumidaController.js?210920200831"></script>
+  <script src="/sefa-ui/v1/config/events.js?210920200831"></script>
+  <!--SCRIPTS ESPECIFICOS DESTE PROJETO-->
+  <!--<script src="assets/js/comum.js?040120171602"></script>-->
+
+  <!-- <script src="assets/js/jqueryui.js"></script> -->
+  <!-- <script src="assets/js/jquery.mobile-1.4.5.min.js"></script> -->
+
+<script>(function (s, t, a, n) {s[t] || (s[t] = a, n = s[a] = function () { n.q.push(arguments) },n.q = [], n.v = 2, n.l = 1 * new Date)})(window, 'InstanaEumObject', 'ineum');ineum('reportingUrl', 'https://eum-red-saas.instana.io');ineum('key', 'druuMM3ORQa-B-t_A890qA');ineum('trackSessions');</script><script defer crossorigin='anonymous' src='https://eum.instana.io/1.7.5/eum.min.js' integrity='sha384-HJjb3vveemdYNUfM1D28dTeXpPPbwPWJinH9ldaGt3KxCO0PNRc4Jb3oQIxMmJMk'></script><script>(function (s, t, a, n) {s[t] || (s[t] = a, n = s[a] = function () { n.q.push(arguments) },n.q = [], n.v = 2, n.l = 1 * new Date)})(window, 'InstanaEumObject', 'ineum');ineum('reportingUrl', 'https://eum-red-saas.instana.io');ineum('key', 'druuMM3ORQa-B-t_A890qA');ineum('trackSessions');</script><script defer crossorigin='anonymous' src='https://eum.instana.io/1.7.5/eum.min.js' integrity='sha384-HJjb3vveemdYNUfM1D28dTeXpPPbwPWJinH9ldaGt3KxCO0PNRc4Jb3oQIxMmJMk'></script><script>(function (s, t, a, n) {s[t] || (s[t] = a, n = s[a] = function () { n.q.push(arguments) },n.q = [], n.v = 2, n.l = 1 * new Date)})(window, 'InstanaEumObject', 'ineum');ineum('reportingUrl', 'https://eum-red-saas.instana.io');ineum('key', 'druuMM3ORQa-B-t_A890qA');ineum('trackSessions');</script><script defer crossorigin='anonymous' src='https://eum.instana.io/1.7.5/eum.min.js' integrity='sha384-HJjb3vveemdYNUfM1D28dTeXpPPbwPWJinH9ldaGt3KxCO0PNRc4Jb3oQIxMmJMk'></script><script>(function (s, t, a, n) {s[t] || (s[t] = a, n = s[a] = function () { n.q.push(arguments) },n.q = [], n.v = 2, n.l = 1 * new Date)})(window, 'InstanaEumObject', 'ineum');ineum('reportingUrl', 'https://eum-red-saas.instana.io');ineum('key', 'druuMM3ORQa-B-t_A890qA');ineum('trackSessions');</script><script defer crossorigin='anonymous' src='https://eum.instana.io/1.7.5/eum.min.js' integrity='sha384-HJjb3vveemdYNUfM1D28dTeXpPPbwPWJinH9ldaGt3KxCO0PNRc4Jb3oQIxMmJMk'></script></body>
+
+</html>
