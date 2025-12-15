@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
-from openai import OpenAI
 
 from ..config import settings
 
@@ -72,6 +71,14 @@ async def extract_receipt_data(file: UploadFile = File(...)) -> dict[str, Any]:
         )
     
     try:
+        try:
+            from openai import OpenAI
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail="Dependência 'openai' não está instalada no servidor",
+            )
+
         # Lê e codifica a imagem
         image_data = await file.read()
         base64_image = base64.b64encode(image_data).decode("utf-8")
