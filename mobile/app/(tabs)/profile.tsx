@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import { Button } from '@/components/ui/Button';
@@ -48,6 +48,25 @@ export default function ProfileScreen() {
     if (rest.length <= 4) return `(${ddd}) ${rest}`;
     if (rest.length <= 8) return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
     return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+  }
+
+  async function handleInvite() {
+    try {
+      const code = (user?.referral_code ?? '').trim();
+      const inviteLink = code
+        ? `https://cadastro.smartlistas.com.br/r/${encodeURIComponent(code)}`
+        : 'https://cadastro.smartlistas.com.br/cadastro';
+      const message =
+        `Vem usar o SmartListas comigo para montar listas de compras e economizar no supermercado!\n\nCrie sua conta por aqui: ${inviteLink}`;
+      await Share.share({ message });
+    } catch {
+      // ignore
+    }
+  }
+
+  function handleSignOut() {
+    signOut();
+    router.replace('/login');
   }
 
   function formatBirthDate(input: string): string {
@@ -164,81 +183,85 @@ export default function ProfileScreen() {
 
   return (
     <Screen>
-      <Text style={styles.title}>Perfil</Text>
-      <Card style={styles.card}>
-        <Text style={styles.lineLabel}>Nome</Text>
-        <Text style={styles.lineValue}>{user?.name ?? '-'}</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Perfil</Text>
+        <Card style={styles.card}>
+          <Text style={styles.lineLabel}>Nome</Text>
+          <Text style={styles.lineValue}>{user?.name ?? '-'}</Text>
 
-        <Text style={styles.lineLabel}>Email</Text>
-        <Text style={styles.lineValue}>{user?.email ?? '-'}</Text>
+          <Text style={styles.lineLabel}>Email</Text>
+          <Text style={styles.lineValue}>{user?.email ?? '-'}</Text>
 
-        <Text style={styles.sectionTitle}>Dados pessoais</Text>
+          <Text style={styles.sectionTitle}>Dados pessoais</Text>
 
-        <Input
-          label="Celular"
-          value={phone}
-          onChangeText={(v) => setPhone(formatPhone(v))}
-          keyboardType="phone-pad"
-          placeholder="(DDD) 99999-9999"
-        />
-        <Input
-          label="Data de nascimento"
-          value={birthDate}
-          onChangeText={(v) => setBirthDate(formatBirthDate(v))}
-          placeholder="DD/MM/AAAA"
-        />
+          <Input
+            label="Celular"
+            value={phone}
+            onChangeText={(v) => setPhone(formatPhone(v))}
+            keyboardType="phone-pad"
+            placeholder="(DDD) 99999-9999"
+          />
+          <Input
+            label="Data de nascimento"
+            value={birthDate}
+            onChangeText={(v) => setBirthDate(formatBirthDate(v))}
+            placeholder="DD/MM/AAAA"
+          />
 
-        <Pressable
-          style={styles.selectField}
-          onPress={() => {
-            setSelecting('gender');
-          }}>
-          <Text style={styles.selectLabel}>Gênero</Text>
-          <Text style={styles.selectValue}>
-            {genderOptions.find((g) => g.value === gender)?.label ?? (gender ? gender : 'Selecione')}
-          </Text>
-        </Pressable>
+          <Pressable
+            style={styles.selectField}
+            onPress={() => {
+              setSelecting('gender');
+            }}>
+            <Text style={styles.selectLabel}>Gênero</Text>
+            <Text style={styles.selectValue}>
+              {genderOptions.find((g) => g.value === gender)?.label ?? (gender ? gender : 'Selecione')}
+            </Text>
+          </Pressable>
 
-        <Text style={styles.sectionTitle}>Localização</Text>
+          <Text style={styles.sectionTitle}>Localização</Text>
 
-        <Pressable
-          style={styles.selectField}
-          onPress={() => {
-            setSelecting('uf');
-          }}>
-          <Text style={styles.selectLabel}>UF</Text>
-          <Text style={styles.selectValue}>{stateUf || 'Selecione'}</Text>
-        </Pressable>
+          <Pressable
+            style={styles.selectField}
+            onPress={() => {
+              setSelecting('uf');
+            }}>
+            <Text style={styles.selectLabel}>UF</Text>
+            <Text style={styles.selectValue}>{stateUf || 'Selecione'}</Text>
+          </Pressable>
 
-        <Pressable
-          style={styles.selectField}
-          onPress={() => {
-            setCitySearch('');
-            setSelecting('city');
-          }}>
-          <Text style={styles.selectLabel}>Cidade</Text>
-          <Text style={styles.selectValue}>{city || 'Selecione'}</Text>
-        </Pressable>
+          <Pressable
+            style={styles.selectField}
+            onPress={() => {
+              setCitySearch('');
+              setSelecting('city');
+            }}>
+            <Text style={styles.selectLabel}>Cidade</Text>
+            <Text style={styles.selectValue}>{city || 'Selecione'}</Text>
+          </Pressable>
 
-        <Input label="Raio de compra (km)" value={radiusKm} onChangeText={setRadiusKm} keyboardType="numeric" placeholder="10" />
+          <Input label="Raio de compra (km)" value={radiusKm} onChangeText={setRadiusKm} keyboardType="numeric" placeholder="10" />
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {success ? <Text style={styles.successText}>{success}</Text> : null}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          {success ? <Text style={styles.successText}>{success}</Text> : null}
 
-        <Button style={styles.saveButton} onPress={() => void handleSave()} disabled={isLoading}>
-          {isLoading ? 'Salvando...' : 'Salvar perfil'}
-        </Button>
+          <View style={styles.actionsRow}>
+            <Button onPress={() => void handleSave()} disabled={isLoading} style={styles.actionBtn}>
+              {isLoading ? 'Salvando...' : 'Salvar'}
+            </Button>
+            <Button variant="secondary" onPress={() => void handleInvite()} style={styles.actionBtn}>
+              Convidar
+            </Button>
+            <Button variant="secondary" onPress={handleSignOut} style={styles.actionBtn}>
+              Sair
+            </Button>
+          </View>
 
-        <Button
-          variant="danger"
-          style={styles.logoutButton}
-          onPress={() => {
-            signOut();
-            router.replace('/login');
-          }}>
-          Sair
-        </Button>
-      </Card>
+        </Card>
+      </ScrollView>
 
       <Modal visible={selecting !== null} transparent animationType="fade" onRequestClose={() => setSelecting(null)}>
         <Pressable style={styles.modalOverlay} onPress={() => setSelecting(null)}>
@@ -290,6 +313,9 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: theme.spacing.xl,
+  },
   title: {
     fontSize: theme.font.size.lg,
     fontWeight: theme.font.weight.bold,
@@ -318,6 +344,15 @@ const styles = StyleSheet.create({
     fontSize: theme.font.size.md,
     fontWeight: theme.font.weight.bold,
     color: theme.colors.text.primary,
+  },
+  actionsRow: {
+    marginTop: theme.spacing.md,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    height: 42,
   },
   saveButton: {
     marginTop: theme.spacing.md,

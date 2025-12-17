@@ -18,6 +18,8 @@ import { AppReceiptKeys } from './pages/AppReceiptKeys';
 import { AppPayments } from './pages/AppPayments';
 import { BillingSettingsPage } from './pages/BillingSettings';
 import CanonicalProducts from './pages/CanonicalProducts';
+import { ReferralRedirect } from './pages/ReferralRedirect';
+import { AppSignup } from './pages/AppSignup';
 import { api } from './api/client';
 
 const queryClient = new QueryClient({
@@ -30,7 +32,18 @@ const queryClient = new QueryClient({
 });
 
 function AppRoutes() {
+  const isSignupHost = typeof window !== 'undefined' && window.location.hostname.startsWith('cadastro.');
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
+
+  if (isSignupHost) {
+    return (
+      <Routes>
+        <Route path="/r/:code" element={<ReferralRedirect />} />
+        <Route path="/cadastro" element={<AppSignup />} />
+        <Route path="*" element={<AppSignup />} />
+      </Routes>
+    );
+  }
 
   useEffect(() => {
     const checkSetup = async () => {

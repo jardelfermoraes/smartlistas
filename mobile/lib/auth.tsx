@@ -16,6 +16,7 @@ export type AppUser = {
   avatar_url?: string | null;
   is_verified: boolean;
   notification_enabled: boolean;
+  referral_code?: string | null;
   created_at: string;
 };
 

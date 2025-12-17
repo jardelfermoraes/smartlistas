@@ -76,6 +76,7 @@ class AppUserOut(BaseModel):
     avatar_url: Optional[str]
     is_verified: bool
     notification_enabled: bool
+    referral_code: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -134,6 +135,7 @@ class AppUserProfile(BaseModel):
     notification_enabled: bool
     notification_deals: bool
     notification_price_drop: bool
+    referral_code: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime]
 
@@ -169,6 +171,10 @@ class TokenResponse(BaseModel):
 class RefreshRequest(BaseModel):
     """Schema para refresh de token."""
     refresh_token: str
+
+
+class ReferralOpenIn(BaseModel):
+    referral_code: str = Field(..., min_length=1, max_length=20)
 
 
 # =============================================================================
@@ -483,6 +489,16 @@ def logout(
     db.commit()
     
     return {"message": "Logout realizado com sucesso"}
+
+
+@router.post("/referrals/open")
+@limiter.limit("60/minute")
+def referral_open(request: Request, data: ReferralOpenIn):
+    code = data.referral_code.strip().upper()
+    if not code:
+        raise HTTPException(status_code=400, detail="Código inválido")
+    logger.info(f"Referral open: code={code} ip={request.client.host if request.client else None}")
+    return {"ok": True}
 
 
 # =============================================================================

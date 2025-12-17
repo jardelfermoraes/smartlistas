@@ -40,6 +40,7 @@ class Settings(BaseSettings):
         "http://localhost:8082",
         "http://localhost:19006",
         "https://smartlistas.com.br",
+        "https://cadastro.smartlistas.com.br",
     ]
 
     # Rate limiting

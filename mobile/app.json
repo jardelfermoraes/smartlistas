@@ -42,7 +42,7 @@
       "eas": {
         "projectId": "e47eab1c-77e4-4a90-9c78-bc831d11fb7a"
       },
-      "apiBaseUrl": "http://localhost:8000"
+      "apiBaseUrl": "https://api.smartlistas.com.br"
     }
   }
 }

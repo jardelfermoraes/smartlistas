@@ -35,6 +35,32 @@ type CanonicalListResponse = {
   pages: number;
 };
 
+function canonicalSuggestionLabel(s: CanonicalProduct, typedQuery: string): string {
+  const base = (s.nome ?? '').trim();
+  const q = (typedQuery ?? '').trim();
+  if (!base) return q || 'Produto';
+
+  const baseLower = base.toLowerCase();
+  const qLower = q.toLowerCase();
+  const shouldPrefix = qLower.length >= 2 && !baseLower.includes(qLower);
+
+  const name = shouldPrefix ? `${q} - ${base}` : base;
+
+  const brand = (s.marca ?? '').trim();
+  const size = s.quantidade_padrao ? `${s.quantidade_padrao}${s.unidade_padrao}` : (s.unidade_padrao ?? '').trim();
+
+  const parts = [name, brand, size].filter((p) => Boolean(p));
+  return parts.join(' • ');
+}
+
+function canonicalSuggestionLabelStable(s: CanonicalProduct): string {
+  const base = (s.nome ?? '').trim();
+  const brand = (s.marca ?? '').trim();
+  const size = s.quantidade_padrao ? `${s.quantidade_padrao}${s.unidade_padrao}` : (s.unidade_padrao ?? '').trim();
+  const parts = [base, brand, size].filter((p) => Boolean(p));
+  return parts.join(' • ') || 'Produto';
+}
+
 type AppOptimizationResult = {
   success: boolean;
   message: string;
@@ -113,6 +139,7 @@ export default function ListDetailScreen() {
 
   const [isOptimizing, setIsOptimizing] = useState(false);
   const didAutoOptimizeRef = useRef(false);
+  const createdAtRef = useRef<string>(new Date().toISOString());
 
   const [editVisible, setEditVisible] = useState(false);
   const [expandedStoreIds, setExpandedStoreIds] = useState<Record<string, boolean>>({});
@@ -148,6 +175,7 @@ export default function ListDetailScreen() {
         setDraftStatus(existing.status ?? 'draft');
         setOptimization(existing.optimization ?? null);
         setExpandedStoreIds({});
+        createdAtRef.current = existing.created_at || createdAtRef.current;
       }
     })();
   }, [listId]);
@@ -170,7 +198,7 @@ export default function ListDetailScreen() {
         items: draftItems,
         status: effectiveStatus,
         optimization,
-        created_at: new Date().toISOString(),
+        created_at: createdAtRef.current,
       });
     }, 350);
 
@@ -204,7 +232,6 @@ export default function ListDetailScreen() {
 
   async function persist(partial?: Partial<ShoppingListDraft>) {
     const name = listName.trim();
-    const now = new Date().toISOString();
 
     const next: Omit<ShoppingListDraft, 'updated_at'> = {
       id: listId,
@@ -212,11 +239,22 @@ export default function ListDetailScreen() {
       items: draftItems,
       status: effectiveStatus,
       optimization,
-      created_at: now,
+      created_at: createdAtRef.current,
       ...(partial ?? null),
     };
 
     await upsertShoppingList(next);
+  }
+
+  async function handleBack() {
+    try {
+      await persist();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erro ao salvar lista';
+      setError(message);
+    } finally {
+      router.back();
+    }
   }
 
   function addItem() {
@@ -239,7 +277,9 @@ export default function ListDetailScreen() {
         };
         return next;
       }
-      return [{ canonical_id: selected.id, product_name: selected.nome, quantity, is_checked: false }, ...prev];
+
+      const label = canonicalSuggestionLabel(selected, query);
+      return [{ canonical_id: selected.id, product_name: label, quantity, is_checked: false }, ...prev];
     });
 
     setQuery('');
@@ -409,7 +449,7 @@ export default function ListDetailScreen() {
   return (
     <Screen>
       <View style={styles.headerRow}>
-        <Button variant="secondary" style={styles.headerIconBtn} onPress={() => router.back()}>
+        <Button variant="secondary" style={styles.headerIconBtn} onPress={() => void handleBack()}>
           Voltar
         </Button>
         <View style={styles.headerCenter}>
@@ -573,16 +613,18 @@ export default function ListDetailScreen() {
                 {suggestions.map((s) => {
                   const selectedId = selected?.id;
                   const isSelected = selectedId === s.id;
+                  const label = canonicalSuggestionLabel(s, query);
+                  const stableLabel = canonicalSuggestionLabelStable(s);
                   return (
                     <Pressable
                       key={s.id}
                       style={[styles.suggestionRow, isSelected ? styles.suggestionRowSelected : null]}
                       onPress={() => {
                         setSelected(s);
-                        setQuery(s.nome);
+                        setQuery(stableLabel);
                         setSuggestions([]);
                       }}>
-                      <Text style={styles.suggestionTitle}>{s.nome}</Text>
+                      <Text style={styles.suggestionTitle}>{label}</Text>
                       <Text style={styles.suggestionSub}>
                         {s.marca ? `${s.marca} • ` : ''}
                         {s.quantidade_padrao ? `${s.quantidade_padrao}${s.unidade_padrao}` : s.unidade_padrao}

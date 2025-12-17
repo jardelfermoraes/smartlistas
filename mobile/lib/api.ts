@@ -53,7 +53,7 @@ function getApiBaseUrl(): string {
   const fromExtra = typeof extra.apiBaseUrl === 'string' ? extra.apiBaseUrl.trim() : '';
   if (fromExtra) return normalizeApiBaseUrl(fromExtra);
 
-  return Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://localhost:8000';
+  return 'https://api.smartlistas.com.br';
 }
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -119,6 +119,28 @@ export async function apiGet<TResponse>(
   }
 
   return (await res.json()) as TResponse;
+}
+
+export async function apiDelete(path: string, options?: RequestOptions): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'DELETE',
+      headers: {
+        ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
+        ...(options?.headers ?? null),
+      },
+    });
+  } catch {
+    const hint = getConnectionHint();
+    throw new Error(
+      hint ? `Falha de conexão com a API (${API_BASE_URL}). ${hint}` : `Falha de conexão com a API (${API_BASE_URL}). Verifique a URL/servidor.`
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res));
+  }
 }
 
 export async function apiPut<TResponse>(path: string, body: unknown, options?: RequestOptions): Promise<TResponse> {

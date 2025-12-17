@@ -54,8 +54,8 @@ const styles = StyleSheet.create({
 
 const variantStyles: Record<Variant, ViewStyle> = {
   primary: {
-    backgroundColor: theme.colors.text.primary,
-    borderColor: theme.colors.text.primary,
+    backgroundColor: theme.colors.brand.primary,
+    borderColor: theme.colors.brand.primary,
   },
   secondary: {
     backgroundColor: theme.colors.bg.surfaceAlt,

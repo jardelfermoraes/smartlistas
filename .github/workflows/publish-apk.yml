@@ -1,0 +1,63 @@
+name: Publish Android APK (Latest)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/publish-apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build APK on EAS
+        id: eas_build
+        run: |
+          eas build --platform android --profile preview --non-interactive --wait --json > build.json
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('build.json','utf8'));const b=Array.isArray(j)?j[0]:j;const url=b?.artifacts?.buildUrl||b?.artifacts?.applicationArchiveUrl||b?.buildUrl||b?.applicationArchiveUrl; if(!url){console.error('Could not find artifact URL in EAS output'); console.error(JSON.stringify(b,null,2)); process.exit(1);} console.log('APK_URL='+url);" >> $GITHUB_OUTPUT
+
+      - name: Download APK
+        run: |
+          curl -L "${{ steps.eas_build.outputs.APK_URL }}" -o ../smartlistas-latest.apk
+
+      - name: Publish GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-latest
+          name: APK (última versão)
+          prerelease: false
+          files: smartlistas-latest.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: false
+
+      - name: Output download link
+        run: |
+          echo "Download: https://github.com/${{ github.repository }}/releases/latest/download/smartlistas-latest.apk"

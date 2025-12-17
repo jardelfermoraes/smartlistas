@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { Text, View } from '@/components/Themed';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
-import { deleteShoppingList, loadShoppingLists, newId, ShoppingListDraft } from '@/lib/shoppingLists';
+import { deleteShoppingList, loadShoppingLists, newId, ShoppingListDraft, upsertShoppingList } from '@/lib/shoppingLists';
 import { theme } from '@/lib/theme';
 
 function statusLabel(status: string): string {
@@ -112,7 +112,20 @@ export default function ListsScreen() {
 
   function startNewList() {
     const id = newId();
-    router.push(`/list/${id}` as any);
+    void (async () => {
+      try {
+        await upsertShoppingList({
+          id,
+          name: 'Nova lista',
+          items: [],
+          status: 'draft',
+          optimization: null,
+          created_at: new Date().toISOString(),
+        });
+      } finally {
+        router.push(`/list/${id}` as any);
+      }
+    })();
   }
 
   function openList(l: ShoppingListDraft) {

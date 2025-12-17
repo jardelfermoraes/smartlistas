@@ -68,8 +68,8 @@ export default function CouponsScreen() {
       }
       const data = await apiGet<SubmissionOut[]>('/app/receipt-keys', undefined, { token: tokens.access_token });
       setHistory(Array.isArray(data) ? data : []);
-    } catch {
-      // silencioso
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao carregar histórico');
     } finally {
       setIsLoadingHistory(false);
     }
