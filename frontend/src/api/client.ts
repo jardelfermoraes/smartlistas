@@ -1,6 +1,17 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000';
+const FALLBACK_LOCAL_API_URL = 'http://127.0.0.1:8000';
+
+function getDefaultApiUrl(): string {
+  if (typeof window === 'undefined') return FALLBACK_LOCAL_API_URL;
+  const host = window.location.hostname;
+  if (host === 'smartlistas.com.br' || host.endsWith('.smartlistas.com.br')) {
+    return 'https://api.smartlistas.com.br';
+  }
+  return FALLBACK_LOCAL_API_URL;
+}
+
+const API_URL = import.meta.env.VITE_API_URL || getDefaultApiUrl();
 
 export const api = axios.create({
   baseURL: API_URL,
