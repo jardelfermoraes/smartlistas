@@ -17,9 +17,16 @@ export function AppSignup() {
   const [radiusKm, setRadiusKm] = useState('10');
   const [referralCode, setReferralCode] = useState('');
 
+  const [ufOptions, setUfOptions] = useState<string[]>([]);
+  const [cityOptions, setCityOptions] = useState<string[]>([]);
+  const [citySearch, setCitySearch] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  type UfOut = { uf: string };
+  type CityOut = { city: string };
 
   useEffect(() => {
     try {
@@ -30,10 +37,63 @@ export function AppSignup() {
     }
   }, []);
 
+  useEffect(() => {
+    void (async () => {
+      try {
+        const ufs = await api.get<UfOut[]>('/app/locations/ufs');
+        setUfOptions(ufs.data.map((u) => u.uf));
+      } catch {
+        setUfOptions([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    const uf = stateUf.trim().toUpperCase();
+    if (!uf || uf.length !== 2) {
+      setCityOptions([]);
+      setCity('');
+      return;
+    }
+
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const cities = await api.get<CityOut[]>('/app/locations/cities', {
+            params: { uf, search: citySearch, limit: 50 },
+          });
+          setCityOptions(cities.data.map((c) => c.city));
+        } catch {
+          setCityOptions([]);
+        }
+      })();
+    }, 200);
+
+    return () => clearTimeout(t);
+  }, [stateUf, citySearch]);
+
   const normalizedReferral = useMemo(() => referralCode.trim().toUpperCase(), [referralCode]);
 
   function normalizePhone(input: string): string {
     return input.replace(/\D/g, '').slice(0, 11);
+  }
+
+  function formatPhone(input: string): string {
+    const digits = normalizePhone(input);
+    if (digits.length === 0) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    const ddd = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    if (rest.length <= 4) return `(${ddd}) ${rest}`;
+    if (rest.length <= 8) return `(${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+    return `(${ddd}) ${rest.slice(0, 5)}-${rest.slice(5)}`;
+  }
+
+  function formatBirthDate(input: string): string {
+    const digits = input.replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
   }
 
   function parseBirthDateToIso(value: string): string | null {
@@ -125,10 +185,14 @@ export function AppSignup() {
         // ignore
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
+      const e2 = err as { message?: string; response?: { status?: number; data?: any } };
+      const status = e2.response?.status;
+      const detail =
+        (typeof e2.response?.data?.detail === 'string' && e2.response?.data?.detail) ||
+        (typeof e2.response?.data === 'string' && e2.response?.data) ||
+        e2.message ||
         'Erro ao criar conta';
-      setError(msg);
+      setError(status ? `${detail} (HTTP ${status})` : detail);
     } finally {
       setIsLoading(false);
     }
@@ -209,7 +273,7 @@ export function AppSignup() {
                   <input
                     className="input"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
                     required
                     inputMode="tel"
                     placeholder="(99) 99999-9999"
@@ -221,7 +285,7 @@ export function AppSignup() {
                   <input
                     className="input"
                     value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
+                    onChange={(e) => setBirthDate(formatBirthDate(e.target.value))}
                     required
                     placeholder="DD/MM/AAAA"
                   />
@@ -240,25 +304,48 @@ export function AppSignup() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">UF</label>
-                  <input
+                  <select
                     className="input"
                     value={stateUf}
-                    onChange={(e) => setStateUf(e.target.value)}
+                    onChange={(e) => {
+                      setStateUf(e.target.value);
+                      setCity('');
+                      setCitySearch('');
+                    }}
                     required
-                    maxLength={2}
-                    placeholder="Ex: PA"
-                  />
+                  >
+                    <option value="">Selecione</option>
+                    {ufOptions.map((uf) => (
+                      <option key={uf} value={uf}>
+                        {uf}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
                   <input
                     className="input"
+                    value={citySearch}
+                    onChange={(e) => setCitySearch(e.target.value)}
+                    placeholder="Buscar cidade..."
+                    disabled={!stateUf}
+                  />
+                  <select
+                    className="input"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     required
-                    placeholder="Ex: Belém"
-                  />
+                    disabled={!stateUf}
+                  >
+                    <option value="">Selecione</option>
+                    {cityOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
