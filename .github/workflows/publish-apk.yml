@@ -38,11 +38,18 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Verify Expo authentication
+        run: eas whoami
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Build APK on EAS
         id: eas_build
         run: |
           eas build --platform android --profile preview --non-interactive --wait --json > build.json
           node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('build.json','utf8'));const b=Array.isArray(j)?j[0]:j;const url=b?.artifacts?.buildUrl||b?.artifacts?.applicationArchiveUrl||b?.buildUrl||b?.applicationArchiveUrl; if(!url){console.error('Could not find artifact URL in EAS output'); console.error(JSON.stringify(b,null,2)); process.exit(1);} console.log('APK_URL='+url);" >> $GITHUB_OUTPUT
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
       - name: Download APK
         run: |
