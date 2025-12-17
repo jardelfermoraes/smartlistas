@@ -19,7 +19,6 @@ export function AppSignup() {
 
   const [ufOptions, setUfOptions] = useState<string[]>([]);
   const [cityOptions, setCityOptions] = useState<string[]>([]);
-  const [citySearch, setCitySearch] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -60,7 +59,7 @@ export function AppSignup() {
       void (async () => {
         try {
           const cities = await api.get<CityOut[]>('/app/locations/cities', {
-            params: { uf, search: citySearch, limit: 50 },
+            params: { uf, search: city.trim(), limit: 50 },
           });
           setCityOptions(cities.data.map((c) => c.city));
         } catch {
@@ -70,7 +69,7 @@ export function AppSignup() {
     }, 200);
 
     return () => clearTimeout(t);
-  }, [stateUf, citySearch]);
+  }, [stateUf, city]);
 
   const normalizedReferral = useMemo(() => referralCode.trim().toUpperCase(), [referralCode]);
 
@@ -310,7 +309,6 @@ export function AppSignup() {
                     onChange={(e) => {
                       setStateUf(e.target.value);
                       setCity('');
-                      setCitySearch('');
                     }}
                     required
                   >
@@ -327,25 +325,18 @@ export function AppSignup() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
                   <input
                     className="input"
-                    value={citySearch}
-                    onChange={(e) => setCitySearch(e.target.value)}
-                    placeholder="Buscar cidade..."
-                    disabled={!stateUf}
-                  />
-                  <select
-                    className="input"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    required
+                    placeholder="Digite para buscar..."
                     disabled={!stateUf}
-                  >
-                    <option value="">Selecione</option>
+                    list="city-options"
+                    required
+                  />
+                  <datalist id="city-options">
                     {cityOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
+                      <option key={c} value={c} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
 
                 <div>
