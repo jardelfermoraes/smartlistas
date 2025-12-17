@@ -9,6 +9,12 @@ export function AppSignup() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [gender, setGender] = useState('');
+  const [stateUf, setStateUf] = useState('');
+  const [city, setCity] = useState('');
+  const [radiusKm, setRadiusKm] = useState('10');
   const [referralCode, setReferralCode] = useState('');
 
   const [isLoading, setIsLoading] = useState(false);
@@ -26,16 +32,86 @@ export function AppSignup() {
 
   const normalizedReferral = useMemo(() => referralCode.trim().toUpperCase(), [referralCode]);
 
+  function normalizePhone(input: string): string {
+    return input.replace(/\D/g, '').slice(0, 11);
+  }
+
+  function parseBirthDateToIso(value: string): string | null {
+    const raw = value.trim();
+    if (!raw) return null;
+
+    const m1 = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m1) {
+      const dd = Number(m1[1]);
+      const mm = Number(m1[2]);
+      const yyyy = Number(m1[3]);
+      if (!dd || !mm || !yyyy) return '__invalid__';
+      if (dd < 1 || dd > 31) return '__invalid__';
+      if (mm < 1 || mm > 12) return '__invalid__';
+      if (yyyy < 1900 || yyyy > 2100) return '__invalid__';
+      return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}T00:00:00Z`;
+    }
+
+    const m2 = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}T00:00:00Z`;
+
+    return '__invalid__';
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
+    const p = normalizePhone(phone);
+    const uf = stateUf.trim().toUpperCase();
+    const c = city.trim();
+    const r = Number(radiusKm);
+    const g = gender.trim();
+    const parsedBirth = parseBirthDateToIso(birthDate);
+
+    if (!p || p.length < 10) {
+      setIsLoading(false);
+      setError('Informe um celular válido (com DDD)');
+      return;
+    }
+    if (!uf || uf.length !== 2) {
+      setIsLoading(false);
+      setError('UF deve ter 2 letras (ex: PA)');
+      return;
+    }
+    if (!c || c.length < 2) {
+      setIsLoading(false);
+      setError('Informe uma cidade válida');
+      return;
+    }
+    if (!Number.isFinite(r) || r < 1 || r > 50) {
+      setIsLoading(false);
+      setError('Raio deve estar entre 1 e 50 km');
+      return;
+    }
+    if (!g) {
+      setIsLoading(false);
+      setError('Selecione um gênero');
+      return;
+    }
+    if (!birthDate.trim() || parsedBirth === '__invalid__') {
+      setIsLoading(false);
+      setError('Data de nascimento inválida (use DD/MM/AAAA)');
+      return;
+    }
 
     try {
       await api.post('/app/register', {
         name,
         email,
         password,
+        phone: p,
+        birth_date: parsedBirth,
+        gender: g,
+        state: uf,
+        city: c,
+        shopping_radius_km: r,
         referral_code: normalizedReferral || null,
       });
 
@@ -125,6 +201,75 @@ export function AppSignup() {
                     minLength={6}
                     autoComplete="new-password"
                     placeholder="Mínimo 6 caracteres"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Celular (com DDD)</label>
+                  <input
+                    className="input"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                    inputMode="tel"
+                    placeholder="(99) 99999-9999"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Data de nascimento</label>
+                  <input
+                    className="input"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    required
+                    placeholder="DD/MM/AAAA"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Gênero</label>
+                  <select className="input" value={gender} onChange={(e) => setGender(e.target.value)} required>
+                    <option value="">Selecione</option>
+                    <option value="female">Feminino</option>
+                    <option value="male">Masculino</option>
+                    <option value="other">Outro</option>
+                    <option value="prefer_not_say">Prefiro não informar</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">UF</label>
+                  <input
+                    className="input"
+                    value={stateUf}
+                    onChange={(e) => setStateUf(e.target.value)}
+                    required
+                    maxLength={2}
+                    placeholder="Ex: PA"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
+                  <input
+                    className="input"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    required
+                    placeholder="Ex: Belém"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Raio de compra (km)</label>
+                  <input
+                    className="input"
+                    value={radiusKm}
+                    onChange={(e) => setRadiusKm(e.target.value)}
+                    required
+                    inputMode="numeric"
+                    placeholder="10"
                   />
                 </div>
 
