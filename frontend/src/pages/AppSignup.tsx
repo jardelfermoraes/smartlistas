@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 
 const REFERRAL_STORAGE_KEY = 'smartlistas.referral_code';
-const APK_LATEST_URL = 'https://github.com/jardelfermoraes/smartlistas/releases/latest/download/smartlistas-latest.apk';
+const APK_LATEST_URL = 'https://github.com/jardelfermoraes/smartlistas/releases/download/apk-latest/smartlistas-latest.apk';
 
 export function AppSignup() {
   const [name, setName] = useState('');
