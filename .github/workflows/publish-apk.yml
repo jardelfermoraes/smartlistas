@@ -53,7 +53,7 @@ jobs:
 
       - name: Download APK
         run: |
-          curl -L "${{ steps.eas_build.outputs.APK_URL }}" -o smartlistas-latest.apk
+          curl -L "${{ steps.eas_build.outputs.APK_URL }}" -o "$GITHUB_WORKSPACE/smartlistas-latest.apk"
 
       - name: Publish GitHub Release asset
         uses: softprops/action-gh-release@v2
