@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import math
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from collections import defaultdict
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from ..models import AppShoppingList, Price, Store
@@ -102,7 +103,7 @@ class AppShoppingOptimizer:
                 items_without_price=[it.id for it in sl.items],
             )
 
-        eligible_store_ids = self._eligible_stores_by_city_radius(user_center, radius_km)
+        eligible_store_ids = self._eligible_stores_by_city_radius(user_center, radius_km, user_uf, user_city)
         if not eligible_store_ids:
             return OptimizationResult(
                 success=False,
@@ -151,20 +152,78 @@ class AppShoppingOptimizer:
             items_without_price=items_without_price,
         )
 
-    def _eligible_stores_by_city_radius(self, user_center: LatLng, radius_km: float) -> set[int]:
-        stores = self.db.query(Store).all()
+    def _eligible_stores_by_city_radius(
+        self,
+        user_center: LatLng,
+        radius_km: float,
+        user_uf: str | None = None,
+        user_city: str | None = None,
+    ) -> set[int]:
+        """Filtra lojas elegíveis por raio.
+
+        Otimização:
+        - Pré-filtra por UF (quando fornecida)
+        - Pré-filtra por bounding box (lat/lng) para reduzir o número de lojas
+        - Para lojas sem lat/lng, inclui somente quando estão na mesma cidade do usuário
+          (evita milhares de chamadas de resolve_city_centroid).
+        """
+
         eligible: set[int] = set()
+        q = self.db.query(Store)
+        if user_uf:
+            q = q.filter(Store.uf == user_uf)
 
+        # Bounding box aproximado (km -> graus)
+        lat = float(user_center.lat)
+        lng = float(user_center.lng)
+        delta_lat = float(radius_km) / 111.0
+        denom = 111.0 * max(0.1, math.cos(math.radians(lat)))
+        delta_lng = float(radius_km) / denom
+
+        min_lat = lat - delta_lat
+        max_lat = lat + delta_lat
+        min_lng = lng - delta_lng
+        max_lng = lng + delta_lng
+
+        has_coords = and_(
+            Store.lat.isnot(None),
+            Store.lng.isnot(None),
+            Store.lat >= min_lat,
+            Store.lat <= max_lat,
+            Store.lng >= min_lng,
+            Store.lng <= max_lng,
+        )
+
+        no_coords_same_uf = and_(
+            Store.lat.is_(None),
+            Store.lng.is_(None),
+            Store.uf.isnot(None),
+            Store.uf == (user_uf or ''),
+        )
+
+        q = q.filter(or_(has_coords, no_coords_same_uf))
+
+        stores = q.all()
+        centroid_cache: dict[tuple[str, str], LatLng | None] = {}
         for s in stores:
-            s_center: LatLng | None = None
-            if s.lat is not None and s.lng is not None:
-                s_center = LatLng(lat=float(s.lat), lng=float(s.lng))
-            else:
-                s_center = resolve_city_centroid(self.db, s.uf, s.cidade)
+            if s.lat is None or s.lng is None:
+                # Sem coord: usa centróide da cidade (com cache) para estimar distância.
+                uf = (s.uf or '').strip().upper()
+                city = (s.cidade or '').strip()
+                if not uf or not city:
+                    continue
 
-            if not s_center:
+                key = (uf, city)
+                if key not in centroid_cache:
+                    centroid_cache[key] = resolve_city_centroid(self.db, uf, city)
+                s_center = centroid_cache[key]
+                if not s_center:
+                    continue
+                if haversine_km(user_center, s_center) <= radius_km:
+                    eligible.add(s.id)
                 continue
 
+            s_center = LatLng(lat=float(s.lat), lng=float(s.lng))
             if haversine_km(user_center, s_center) <= radius_km:
                 eligible.add(s.id)
 

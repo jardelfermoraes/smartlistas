@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Text } from '@/components/Themed';
@@ -12,10 +12,15 @@ import { theme } from '@/lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { isLoading, signInWithEmail } = useAuth();
+  const { isLoading, isAuthenticated, signInWithEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) router.replace('/(tabs)');
+  }, [isAuthenticated, isLoading, router]);
 
   return (
     <Screen style={styles.container}>

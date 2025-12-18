@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet } from 'react-native';
 
 import { Text } from '@/components/Themed';
@@ -12,7 +12,7 @@ import { theme } from '@/lib/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
-  const { isLoading, signUpWithEmail } = useAuth();
+  const { isLoading, isAuthenticated, signUpWithEmail } = useAuth();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -22,6 +22,11 @@ export default function SignupScreen() {
   const [gender, setGender] = useState<string>('');
   const [selectingGender, setSelectingGender] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) router.replace('/(tabs)');
+  }, [isAuthenticated, isLoading, router]);
 
   const genderOptions: Array<{ value: string; label: string }> = [
     { value: 'female', label: 'Feminino' },

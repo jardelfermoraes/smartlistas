@@ -339,7 +339,7 @@ def optimize_local_payload(
         )
 
     optimizer = AppShoppingOptimizer(db)
-    eligible_store_ids = optimizer._eligible_stores_by_city_radius(user_center, radius_km)
+    eligible_store_ids = optimizer._eligible_stores_by_city_radius(user_center, radius_km, current_user.state, current_user.city)
     if not eligible_store_ids:
         return AppOptimizationResultOut(
             success=False,
