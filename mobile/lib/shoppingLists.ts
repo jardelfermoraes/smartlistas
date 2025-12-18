@@ -29,6 +29,7 @@ export type ShoppingListOptimizationResult = {
   total_cost: number;
   savings: number;
   savings_percent: number;
+  items_without_price?: number[];
   optimized_at: string;
 };
 
@@ -63,10 +64,16 @@ export async function loadShoppingLists(): Promise<ShoppingListDraft[]> {
       const optRaw = (l as any).optimization;
       const optimization = optRaw && typeof optRaw === 'object' ? (optRaw as ShoppingListOptimizationResult) : null;
 
+      const checked = items.filter((it) => Boolean((it as any).is_checked)).length;
+      let status = (l.status as ShoppingListStatus) ?? 'draft';
+      if (status === 'in_progress' && checked === 0) {
+        status = optimization?.allocations?.length ? 'optimized' : 'draft';
+      }
+
       return {
         ...l,
         items,
-        status: (l.status as ShoppingListStatus) ?? 'draft',
+        status,
         optimization,
       };
     });

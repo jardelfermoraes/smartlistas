@@ -290,7 +290,7 @@ export default function ListsScreen() {
                       <Text style={[styles.badgeText, { color: tones.optimized.text }]}>Otimizada</Text>
                     </View>
                   ) : null}
-                  {(item.status ?? 'draft') !== 'optimized' ? (
+                  {listTone(item) !== 'optimized' ? (
                     <View
                       style={[
                         styles.badge,
@@ -299,7 +299,7 @@ export default function ListsScreen() {
                           borderColor: tones[listTone(item)].border,
                         },
                       ]}>
-                      <Text style={[styles.badgeText, { color: tones[listTone(item)].text }]}>{statusLabel(item.status ?? 'draft')}</Text>
+                      <Text style={[styles.badgeText, { color: tones[listTone(item)].text }]}>{statusLabel(listTone(item))}</Text>
                     </View>
                   ) : null}
                 </View>

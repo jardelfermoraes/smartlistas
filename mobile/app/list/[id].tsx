@@ -35,30 +35,40 @@ type CanonicalListResponse = {
   pages: number;
 };
 
-function canonicalSuggestionLabel(s: CanonicalProduct, typedQuery: string): string {
-  const base = (s.nome ?? '').trim();
-  const q = (typedQuery ?? '').trim();
-  if (!base) return q || 'Produto';
-
-  const baseLower = base.toLowerCase();
-  const qLower = q.toLowerCase();
-  const shouldPrefix = qLower.length >= 2 && !baseLower.includes(qLower);
-
-  const name = shouldPrefix ? `${q} - ${base}` : base;
-
-  const brand = (s.marca ?? '').trim();
-  const size = s.quantidade_padrao ? `${s.quantidade_padrao}${s.unidade_padrao}` : (s.unidade_padrao ?? '').trim();
-
-  const parts = [name, brand, size].filter((p) => Boolean(p));
-  return parts.join(' • ');
+function canonicalTitle(s: CanonicalProduct): string {
+  return (s.nome ?? '').trim() || 'Produto';
 }
 
-function canonicalSuggestionLabelStable(s: CanonicalProduct): string {
-  const base = (s.nome ?? '').trim();
+function canonicalMeta(s: CanonicalProduct): string {
   const brand = (s.marca ?? '').trim();
   const size = s.quantidade_padrao ? `${s.quantidade_padrao}${s.unidade_padrao}` : (s.unidade_padrao ?? '').trim();
-  const parts = [base, brand, size].filter((p) => Boolean(p));
+  return [brand, size].filter((p) => Boolean(p)).join(' • ');
+}
+
+function canonicalListLabel(s: CanonicalProduct): string {
+  const parts = [canonicalTitle(s), canonicalMeta(s)].filter((p) => Boolean(p));
   return parts.join(' • ') || 'Produto';
+}
+
+function normalizeForSearch(value: string): string {
+  const v = (value ?? '').toLowerCase();
+  const normalized = typeof v.normalize === 'function' ? v.normalize('NFD') : v;
+  return normalized.replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function suggestionScore(s: CanonicalProduct, q: string): number {
+  const nq = normalizeForSearch(q);
+  if (nq.length < 2) return 0;
+
+  const name = normalizeForSearch(s.nome ?? '');
+  const brand = normalizeForSearch(s.marca ?? '');
+  const nameHit = name.includes(nq);
+  const brandHit = brand.includes(nq);
+  if (!nameHit && !brandHit) return 0;
+  if (name.startsWith(nq)) return 4;
+  if (nameHit) return 3;
+  if (brand.startsWith(nq)) return 2;
+  return 1;
 }
 
 type AppOptimizationResult = {
@@ -108,6 +118,17 @@ function computeListStatus(base: ShoppingListStatus, items: ShoppingListDraft['i
   if (checked === 0) return base;
   if (checked === items.length) return 'completed';
   return 'in_progress';
+}
+
+function allocatedCanonicalIds(opt: ShoppingListOptimizationResult | null): Set<number> {
+  const ids = new Set<number>();
+  if (!opt?.allocations?.length) return ids;
+  for (const alloc of opt.allocations) {
+    for (const it of alloc.items) {
+      if (typeof it.canonical_id === 'number') ids.add(it.canonical_id);
+    }
+  }
+  return ids;
 }
 
 export default function ListDetailScreen() {
@@ -196,7 +217,7 @@ export default function ListDetailScreen() {
         id: listId,
         name: listName.trim() || 'Sem nome',
         items: draftItems,
-        status: effectiveStatus,
+        status: draftStatus,
         optimization,
         created_at: createdAtRef.current,
       });
@@ -218,7 +239,16 @@ export default function ListDetailScreen() {
       setIsSearching(true);
       try {
         const res = await apiGet<CanonicalListResponse>('/canonical', { search: q, page: 1, page_size: 8 });
-        setSuggestions(res.items);
+        const ranked = (res.items ?? [])
+          .map((it) => ({ it, score: suggestionScore(it, q) }))
+          .filter((x) => x.score > 0)
+          .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return canonicalTitle(a.it).localeCompare(canonicalTitle(b.it), 'pt-BR');
+          })
+          .map((x) => x.it);
+
+        setSuggestions(ranked);
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Erro ao buscar produtos';
         setError(message);
@@ -278,7 +308,7 @@ export default function ListDetailScreen() {
         return next;
       }
 
-      const label = canonicalSuggestionLabel(selected, query);
+      const label = canonicalListLabel(selected);
       return [{ canonical_id: selected.id, product_name: label, quantity, is_checked: false }, ...prev];
     });
 
@@ -363,6 +393,7 @@ export default function ListDetailScreen() {
         total_cost: res.total_cost,
         savings: res.savings,
         savings_percent: res.savings_percent,
+        items_without_price: res.items_without_price,
         optimized_at: new Date().toISOString(),
       };
 
@@ -514,13 +545,12 @@ export default function ListDetailScreen() {
                       const local = draftItems.find((x) => x.canonical_id === it.canonical_id);
                       const checked = Boolean(local?.is_checked);
                       return (
-                        <Pressable
-                          key={String(it.canonical_id)}
-                          style={styles.storeItemRow}
-                          onPress={() => toggleItemChecked(it.canonical_id)}>
-                          <View style={[styles.checkBox, checked ? styles.checkBoxChecked : null]}>
-                            {checked ? <View style={styles.checkDot} /> : null}
-                          </View>
+                        <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                          <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                            <View style={[styles.checkBox, checked ? styles.checkBoxChecked : null]}>
+                              {checked ? <View style={styles.checkDot} /> : null}
+                            </View>
+                          </Pressable>
                           <View style={styles.storeItemInfo}>
                             <Text style={[styles.itemName, checked ? styles.itemNameChecked : null]} numberOfLines={1}>
                               {it.product_name}
@@ -529,7 +559,7 @@ export default function ListDetailScreen() {
                               Qtd: {it.quantity} • R$ {it.price.toFixed(2)} • Sub: R$ {it.subtotal.toFixed(2)}
                             </Text>
                           </View>
-                        </Pressable>
+                        </View>
                       );
                     })}
                   </View>
@@ -537,6 +567,34 @@ export default function ListDetailScreen() {
               </View>
             );
           })}
+
+          {(() => {
+            const allocated = allocatedCanonicalIds(optimization);
+            const missing = draftItems.filter((it) => !allocated.has(it.canonical_id));
+            if (!missing.length) return null;
+            return (
+              <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
+                <Text style={styles.sectionTitle}>Itens sem preço</Text>
+                {missing.map((it) => (
+                  <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                    <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                      <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                        {it.is_checked ? <View style={styles.checkDot} /> : null}
+                      </View>
+                    </Pressable>
+                    <View style={styles.storeItemInfo}>
+                      <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                        {it.product_name}
+                      </Text>
+                      <Text style={styles.itemSub} numberOfLines={1}>
+                        Qtd: {it.quantity} • sem preço
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
         </Card>
       ) : (
         <FlatList
@@ -552,10 +610,10 @@ export default function ListDetailScreen() {
                 </View>
               </Pressable>
 
-              <Pressable style={styles.itemInfo} onPress={() => toggleItemChecked(item.canonical_id)}>
+              <View style={styles.itemInfo}>
                 <Text style={[styles.itemName, item.is_checked ? styles.itemNameChecked : null]}>{item.product_name}</Text>
                 <Text style={styles.itemSub}>Qtd: {item.quantity}</Text>
-              </Pressable>
+              </View>
             </View>
           )}
         />
@@ -613,22 +671,19 @@ export default function ListDetailScreen() {
                 {suggestions.map((s) => {
                   const selectedId = selected?.id;
                   const isSelected = selectedId === s.id;
-                  const label = canonicalSuggestionLabel(s, query);
-                  const stableLabel = canonicalSuggestionLabelStable(s);
+                  const title = canonicalTitle(s);
+                  const meta = canonicalMeta(s);
                   return (
                     <Pressable
                       key={s.id}
                       style={[styles.suggestionRow, isSelected ? styles.suggestionRowSelected : null]}
                       onPress={() => {
                         setSelected(s);
-                        setQuery(stableLabel);
+                        setQuery(title);
                         setSuggestions([]);
                       }}>
-                      <Text style={styles.suggestionTitle}>{label}</Text>
-                      <Text style={styles.suggestionSub}>
-                        {s.marca ? `${s.marca} • ` : ''}
-                        {s.quantidade_padrao ? `${s.quantidade_padrao}${s.unidade_padrao}` : s.unidade_padrao}
-                      </Text>
+                      <Text style={styles.suggestionTitle}>{title}</Text>
+                      {meta ? <Text style={styles.suggestionSub}>{meta}</Text> : null}
                     </Pressable>
                   );
                 })}
