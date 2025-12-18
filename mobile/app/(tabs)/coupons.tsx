@@ -37,7 +37,7 @@ function formatDate(iso: string): string {
 }
 
 export default function CouponsScreen() {
-  const { tokens } = useAuth();
+  const { tokens, refreshAccessToken } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
 
   const [mode, setMode] = useState<'qr' | 'barcode' | 'manual'>('qr');
@@ -66,14 +66,17 @@ export default function CouponsScreen() {
         setHistory([]);
         return;
       }
-      const data = await apiGet<SubmissionOut[]>('/app/receipt-keys', undefined, { token: tokens.access_token });
+      const data = await apiGet<SubmissionOut[]>('/app/receipt-keys', undefined, {
+        token: tokens.access_token,
+        onRefreshToken: refreshAccessToken,
+      });
       setHistory(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar histórico');
     } finally {
       setIsLoadingHistory(false);
     }
-  }, [tokens?.access_token]);
+  }, [refreshAccessToken, tokens?.access_token]);
 
   useEffect(() => {
     void loadHistory();
@@ -116,7 +119,7 @@ export default function CouponsScreen() {
       const res = await apiPost<{ id: number; status: string; message: string }>(
         '/app/receipt-keys',
         { raw_text: rawText.trim() || null, chave_acesso: extracted, source: mode },
-        { token: tokens.access_token }
+        { token: tokens.access_token, onRefreshToken: refreshAccessToken }
       );
       setSuccessMsg(res.message || 'Enviado!');
       setRawText('');

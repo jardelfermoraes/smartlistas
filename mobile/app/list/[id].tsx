@@ -113,7 +113,7 @@ function computeListStatus(base: ShoppingListStatus, items: ShoppingListDraft['i
 export default function ListDetailScreen() {
   const router = useRouter();
   const { id, autoOptimize } = useLocalSearchParams<{ id: string; autoOptimize?: string }>();
-  const { tokens } = useAuth();
+  const { tokens, refreshAccessToken } = useAuth();
   const [permission, requestPermission] = useCameraPermissions();
 
   const listId = typeof id === 'string' ? id : '';
@@ -337,7 +337,7 @@ export default function ListDetailScreen() {
             quantity: it.quantity,
           })),
         },
-        { token: tokens.access_token }
+        { token: tokens.access_token, onRefreshToken: refreshAccessToken }
       );
 
       if (!res.success) {
@@ -420,7 +420,7 @@ export default function ListDetailScreen() {
             is_checked: Boolean(it.is_checked),
           })),
         },
-        { token: tokens.access_token }
+        { token: tokens.access_token, onRefreshToken: refreshAccessToken }
       );
 
       await upsertShoppingList({

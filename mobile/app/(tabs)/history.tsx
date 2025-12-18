@@ -46,7 +46,7 @@ function formatDate(iso: string): string {
 }
 
 export default function HistoryScreen() {
-  const { tokens } = useAuth();
+  const { tokens, refreshAccessToken } = useAuth();
   const router = useRouter();
 
   const [items, setItems] = useState<PurchaseOut[]>([]);
@@ -103,7 +103,11 @@ export default function HistoryScreen() {
 
     setIsLoading(true);
     try {
-      const data = await apiGet<PurchaseOut[]>('/app/purchases', { page: 1, page_size: 20 }, { token: tokens.access_token });
+      const data = await apiGet<PurchaseOut[]>(
+        '/app/purchases',
+        { page: 1, page_size: 20 },
+        { token: tokens.access_token, onRefreshToken: refreshAccessToken }
+      );
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar histórico');

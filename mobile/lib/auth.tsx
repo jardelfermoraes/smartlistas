@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiPost, apiPut } from '@/lib/api';
 import { storage } from '@/lib/storage';
@@ -40,6 +40,7 @@ type AuthContextValue = {
   updateProfile(
     data: Partial<Pick<AppUser, 'name' | 'phone' | 'birth_date' | 'gender' | 'state' | 'city' | 'shopping_radius_km'>>
   ): Promise<void>;
+  refreshAccessToken(): Promise<string | null>;
   signOut(): void;
 };
 
@@ -52,6 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [tokens, setTokens] = useState<AuthTokens | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+
+  function clearSession() {
+    setTokens(null);
+    setUser(null);
+    void storage.removeItem(TOKENS_KEY);
+    void storage.removeItem(USER_KEY);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -89,11 +98,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {
+    const refreshAccessTokenImpl = async (): Promise<string | null> => {
+      if (!tokens?.refresh_token) return null;
+      if (refreshInFlightRef.current) return await refreshInFlightRef.current;
+
+      refreshInFlightRef.current = (async () => {
+        try {
+          const data = await apiPost<LoginResponse>('/app/refresh', {
+            refresh_token: tokens.refresh_token,
+          });
+          const nextTokens: AuthTokens = {
+            access_token: data.access_token,
+            refresh_token: data.refresh_token,
+            token_type: data.token_type,
+          };
+          setTokens(nextTokens);
+          setUser(data.user);
+          await storage.setItem(TOKENS_KEY, JSON.stringify(nextTokens));
+          await storage.setItem(USER_KEY, JSON.stringify(data.user));
+          return nextTokens.access_token;
+        } catch {
+          clearSession();
+          return null;
+        } finally {
+          refreshInFlightRef.current = null;
+        }
+      })();
+
+      return await refreshInFlightRef.current;
+    };
+
     return {
       isLoading,
       isAuthenticated: Boolean(tokens?.access_token),
       tokens,
       user,
+      async refreshAccessToken() {
+        return await refreshAccessTokenImpl();
+      },
       async signInWithEmail(email: string, password: string) {
         setIsLoading(true);
         try {
@@ -142,7 +184,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!tokens?.access_token) throw new Error('Você precisa estar logado');
         setIsLoading(true);
         try {
-          const updated = await apiPut<AppUser>('/app/me', data, { token: tokens.access_token });
+          const updated = await apiPut<AppUser>('/app/me', data, {
+            token: tokens.access_token,
+            onRefreshToken: refreshAccessTokenImpl,
+          });
           setUser(updated);
           await storage.setItem(USER_KEY, JSON.stringify(updated));
         } finally {
@@ -150,10 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       },
       signOut() {
-        setTokens(null);
-        setUser(null);
-        void storage.removeItem(TOKENS_KEY);
-        void storage.removeItem(USER_KEY);
+        clearSession();
       },
     };
   }, [isLoading, tokens, user]);

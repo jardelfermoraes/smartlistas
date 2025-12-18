@@ -82,7 +82,30 @@ async function parseErrorDetail(res: Response): Promise<string> {
 type RequestOptions = {
   token?: string;
   headers?: Record<string, string>;
+  onRefreshToken?: () => Promise<string | null>;
 };
+
+async function fetchWithOptionalRefresh(
+  url: string,
+  init: RequestInit,
+  options?: RequestOptions
+): Promise<Response> {
+  const res = await fetch(url, init);
+  if (res.status !== 401 || !options?.onRefreshToken || !options?.token) return res;
+
+  const nextToken = await options.onRefreshToken();
+  if (!nextToken) return res;
+
+  const nextHeaders = {
+    ...(init.headers ?? null),
+    Authorization: `Bearer ${nextToken}`,
+  } as Record<string, string>;
+
+  return await fetch(url, {
+    ...init,
+    headers: nextHeaders,
+  });
+}
 
 export async function apiGet<TResponse>(
   path: string,
@@ -100,13 +123,17 @@ export async function apiGet<TResponse>(
   const url = qs ? `${API_BASE_URL}${path}?${qs}` : `${API_BASE_URL}${path}`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithOptionalRefresh(
+      url,
+      {
       method: 'GET',
       headers: {
         ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
         ...(options?.headers ?? null),
       },
-    });
+      },
+      options
+    );
   } catch {
     const hint = getConnectionHint();
     throw new Error(
@@ -124,13 +151,18 @@ export async function apiGet<TResponse>(
 export async function apiDelete(path: string, options?: RequestOptions): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
+    const url = `${API_BASE_URL}${path}`;
+    res = await fetchWithOptionalRefresh(
+      url,
+      {
       method: 'DELETE',
       headers: {
         ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
         ...(options?.headers ?? null),
       },
-    });
+      },
+      options
+    );
   } catch {
     const hint = getConnectionHint();
     throw new Error(
@@ -146,7 +178,10 @@ export async function apiDelete(path: string, options?: RequestOptions): Promise
 export async function apiPut<TResponse>(path: string, body: unknown, options?: RequestOptions): Promise<TResponse> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
+    const url = `${API_BASE_URL}${path}`;
+    res = await fetchWithOptionalRefresh(
+      url,
+      {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -154,7 +189,9 @@ export async function apiPut<TResponse>(path: string, body: unknown, options?: R
         ...(options?.headers ?? null),
       },
       body: JSON.stringify(body),
-    });
+      },
+      options
+    );
   } catch {
     const hint = getConnectionHint();
     throw new Error(
@@ -172,7 +209,10 @@ export async function apiPut<TResponse>(path: string, body: unknown, options?: R
 export async function apiPost<TResponse>(path: string, body: unknown, options?: RequestOptions): Promise<TResponse> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, {
+    const url = `${API_BASE_URL}${path}`;
+    res = await fetchWithOptionalRefresh(
+      url,
+      {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -180,7 +220,9 @@ export async function apiPost<TResponse>(path: string, body: unknown, options?: 
         ...(options?.headers ?? null),
       },
       body: JSON.stringify(body),
-    });
+      },
+      options
+    );
   } catch {
     const hint = getConnectionHint();
     throw new Error(
