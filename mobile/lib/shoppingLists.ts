@@ -15,6 +15,14 @@ export type ShoppingListOptimizationItem = {
   subtotal: number;
 };
 
+export type ShoppingListFallbackPriceItem = {
+  canonical_id: number;
+  store_id: number;
+  store_name: string;
+  price: number;
+  price_date: string;
+};
+
 export type ShoppingListOptimizationAllocation = {
   store_id: number;
   store_name: string;
@@ -30,6 +38,10 @@ export type ShoppingListOptimizationResult = {
   savings: number;
   savings_percent: number;
   items_without_price?: number[];
+  items_outside_selected_stores?: number[];
+  unoptimized_prices?: ShoppingListFallbackPriceItem[];
+  fallback_prices?: ShoppingListFallbackPriceItem[];
+  price_lookback_days?: number;
   optimized_at: string;
 };
 
@@ -38,6 +50,7 @@ export type ShoppingListStatus = 'draft' | 'closed' | 'in_progress' | 'completed
 export type ShoppingListDraft = {
   id: string;
   name: string;
+  max_stores?: number;
   items: ShoppingListItemDraft[];
   status?: ShoppingListStatus;
   optimization?: ShoppingListOptimizationResult | null;
@@ -54,6 +67,9 @@ export async function loadShoppingLists(): Promise<ShoppingListDraft[]> {
     const data = JSON.parse(raw) as ShoppingListDraft[];
     if (!Array.isArray(data)) return [];
     return data.map((l) => {
+      const maxStoresRaw = Number((l as any).max_stores);
+      const max_stores = Number.isFinite(maxStoresRaw) && maxStoresRaw >= 1 ? Math.min(5, Math.max(1, maxStoresRaw)) : 3;
+
       const items = Array.isArray(l.items)
         ? l.items.map((it) => ({
             ...it,
@@ -72,6 +88,7 @@ export async function loadShoppingLists(): Promise<ShoppingListDraft[]> {
 
       return {
         ...l,
+        max_stores,
         items,
         status,
         optimization,
@@ -90,8 +107,12 @@ export async function upsertShoppingList(list: Omit<ShoppingListDraft, 'updated_
   const lists = await loadShoppingLists();
   const now = new Date().toISOString();
 
+  const maxStoresRaw = Number((list as any).max_stores);
+  const max_stores = Number.isFinite(maxStoresRaw) && maxStoresRaw >= 1 ? Math.min(5, Math.max(1, maxStoresRaw)) : 3;
+
   const updated: ShoppingListDraft = {
     ...list,
+    max_stores,
     status: list.status ?? 'draft',
     optimization: (list as any).optimization ?? null,
     items: Array.isArray(list.items)

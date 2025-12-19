@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth';
 import {
   getShoppingListById,
   ShoppingListDraft,
+  ShoppingListFallbackPriceItem,
   ShoppingListOptimizationResult,
   ShoppingListStatus,
   upsertShoppingList,
@@ -93,6 +94,10 @@ type AppOptimizationResult = {
   savings: number;
   savings_percent: number;
   items_without_price: number[];
+  items_outside_selected_stores?: number[];
+  unoptimized_prices?: ShoppingListFallbackPriceItem[];
+  fallback_prices?: ShoppingListFallbackPriceItem[];
+  price_lookback_days?: number;
 };
 
 function statusLabel(status: ShoppingListStatus): string {
@@ -120,17 +125,6 @@ function computeListStatus(base: ShoppingListStatus, items: ShoppingListDraft['i
   return 'in_progress';
 }
 
-function allocatedCanonicalIds(opt: ShoppingListOptimizationResult | null): Set<number> {
-  const ids = new Set<number>();
-  if (!opt?.allocations?.length) return ids;
-  for (const alloc of opt.allocations) {
-    for (const it of alloc.items) {
-      if (typeof it.canonical_id === 'number') ids.add(it.canonical_id);
-    }
-  }
-  return ids;
-}
-
 export default function ListDetailScreen() {
   const router = useRouter();
   const { id, autoOptimize } = useLocalSearchParams<{ id: string; autoOptimize?: string }>();
@@ -143,6 +137,7 @@ export default function ListDetailScreen() {
   const [draftItems, setDraftItems] = useState<ShoppingListDraft['items']>([]);
   const [draftStatus, setDraftStatus] = useState<ShoppingListStatus>('draft');
   const [optimization, setOptimization] = useState<ShoppingListOptimizationResult | null>(null);
+  const [maxStores, setMaxStores] = useState(3);
 
   const [query, setQuery] = useState('');
   const [qty, setQty] = useState('1');
@@ -195,6 +190,7 @@ export default function ListDetailScreen() {
         setDraftItems(existing.items);
         setDraftStatus(existing.status ?? 'draft');
         setOptimization(existing.optimization ?? null);
+        setMaxStores(existing.max_stores ?? 3);
         setExpandedStoreIds({});
         createdAtRef.current = existing.created_at || createdAtRef.current;
       }
@@ -216,6 +212,7 @@ export default function ListDetailScreen() {
       void upsertShoppingList({
         id: listId,
         name: listName.trim() || 'Sem nome',
+        max_stores: maxStores,
         items: draftItems,
         status: draftStatus,
         optimization,
@@ -224,7 +221,7 @@ export default function ListDetailScreen() {
     }, 350);
 
     return () => clearTimeout(t);
-  }, [listId, listName, draftItems, effectiveStatus, optimization]);
+  }, [draftItems, draftStatus, effectiveStatus, listId, listName, maxStores, optimization]);
 
   useEffect(() => {
     setError(null);
@@ -266,8 +263,9 @@ export default function ListDetailScreen() {
     const next: Omit<ShoppingListDraft, 'updated_at'> = {
       id: listId,
       name: name || 'Sem nome',
+      max_stores: maxStores,
       items: draftItems,
-      status: effectiveStatus,
+      status: draftStatus,
       optimization,
       created_at: createdAtRef.current,
       ...(partial ?? null),
@@ -343,6 +341,8 @@ export default function ListDetailScreen() {
     setError(null);
     const name = listName.trim();
 
+    const effectiveMaxStores = Number.isFinite(maxStores) ? Math.min(5, Math.max(1, maxStores)) : 3;
+
     if (!tokens?.access_token) {
       setError('Você precisa estar logado para otimizar a lista');
       return;
@@ -361,7 +361,7 @@ export default function ListDetailScreen() {
       const res = await apiPost<AppOptimizationResult>(
         `/app/optimization`,
         {
-          max_stores: 3,
+          max_stores: effectiveMaxStores,
           items: draftItems.map((it) => ({
             canonical_id: it.canonical_id,
             quantity: it.quantity,
@@ -394,6 +394,10 @@ export default function ListDetailScreen() {
         savings: res.savings,
         savings_percent: res.savings_percent,
         items_without_price: res.items_without_price,
+        items_outside_selected_stores: res.items_outside_selected_stores,
+        unoptimized_prices: res.unoptimized_prices,
+        fallback_prices: res.fallback_prices,
+        price_lookback_days: res.price_lookback_days,
         optimized_at: new Date().toISOString(),
       };
 
@@ -403,6 +407,7 @@ export default function ListDetailScreen() {
       await upsertShoppingList({
         id: listId,
         name,
+        max_stores: effectiveMaxStores,
         items: draftItems,
         status: 'optimized',
         optimization: normalized,
@@ -569,13 +574,35 @@ export default function ListDetailScreen() {
           })}
 
           {(() => {
-            const allocated = allocatedCanonicalIds(optimization);
-            const missing = draftItems.filter((it) => !allocated.has(it.canonical_id));
-            if (!missing.length) return null;
+            const allocations = optimization?.allocations ?? [];
+            const allocated = new Set<number>();
+            for (const a of allocations) for (const it of a.items) allocated.add(it.canonical_id);
+
+            const withoutRecent = new Set<number>((optimization?.items_without_price ?? []) as number[]);
+            const inferredOutside = draftItems
+              .map((it) => it.canonical_id)
+              .filter((id) => !allocated.has(id) && !withoutRecent.has(id));
+
+            const outside = (optimization?.items_outside_selected_stores?.length
+              ? optimization.items_outside_selected_stores
+              : inferredOutside) as number[];
+
+            if (!outside.length) return null;
+
+            const prices = optimization?.unoptimized_prices ?? [];
+            const byId = new Map<number, ShoppingListFallbackPriceItem>();
+            for (const p of prices) byId.set(p.canonical_id, p);
+
+            const items = draftItems
+              .filter((it) => outside.includes(it.canonical_id))
+              .map((it) => ({ it, price: byId.get(it.canonical_id) }));
+
+            if (!items.length) return null;
+
             return (
               <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
-                <Text style={styles.sectionTitle}>Itens sem preço</Text>
-                {missing.map((it) => (
+                <Text style={styles.sectionTitle}>Itens fora dos supermercados selecionados</Text>
+                {items.map(({ it, price }) => (
                   <View key={String(it.canonical_id)} style={styles.storeItemRow}>
                     <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
                       <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
@@ -586,9 +613,63 @@ export default function ListDetailScreen() {
                       <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
                         {it.product_name}
                       </Text>
-                      <Text style={styles.itemSub} numberOfLines={1}>
-                        Qtd: {it.quantity} • sem preço
+                      {price ? (
+                        <Text style={styles.itemSub} numberOfLines={1}>
+                          Qtd: {it.quantity} • R$ {price.price.toFixed(2)} ({price.store_name})
+                        </Text>
+                      ) : (
+                        <Text style={styles.itemSub} numberOfLines={1}>
+                          Qtd: {it.quantity} • sem preço nos supermercados selecionados
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                <Text style={styles.meta}>
+                  Dica: aumente a quantidade de supermercados na edição da lista para incluir esses itens na otimização.
+                </Text>
+              </View>
+            );
+          })()}
+
+          {(() => {
+            const withoutRecent = optimization?.items_without_price ?? [];
+            if (!withoutRecent.length) return null;
+
+            const lookback = optimization?.price_lookback_days ?? 15;
+            const fallback = optimization?.fallback_prices ?? [];
+            const byId = new Map<number, ShoppingListFallbackPriceItem>();
+            for (const p of fallback) byId.set(p.canonical_id, p);
+
+            const items = draftItems
+              .filter((it) => withoutRecent.includes(it.canonical_id))
+              .map((it) => ({ it, fallback: byId.get(it.canonical_id) }));
+
+            if (!items.length) return null;
+
+            return (
+              <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
+                <Text style={styles.sectionTitle}>Itens sem preço recente (últimos {lookback} dias)</Text>
+                {items.map(({ it, fallback }) => (
+                  <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                    <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                      <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                        {it.is_checked ? <View style={styles.checkDot} /> : null}
+                      </View>
+                    </Pressable>
+                    <View style={styles.storeItemInfo}>
+                      <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                        {it.product_name}
                       </Text>
+                      {fallback ? (
+                        <Text style={styles.itemSub} numberOfLines={1}>
+                          Qtd: {it.quantity} • R$ {fallback.price.toFixed(2)} ({fallback.store_name})
+                        </Text>
+                      ) : (
+                        <Text style={styles.itemSub} numberOfLines={1}>
+                          Qtd: {it.quantity} • sem preço
+                        </Text>
+                      )}
                     </View>
                   </View>
                 ))}
@@ -637,6 +718,21 @@ export default function ListDetailScreen() {
           <Pressable style={styles.modalCard} onPress={() => null}>
             <Text style={styles.modalTitle}>Editar lista</Text>
             <Input label="Nome da lista" value={listName} onChangeText={setListName} placeholder="Ex: Jantar" />
+
+            <Input
+              label="Máx. supermercados (1 a 5)"
+              value={String(maxStores)}
+              keyboardType="numeric"
+              onChangeText={(v) => {
+                const n = Number(v.replace(/[^0-9]/g, ''));
+                if (!Number.isFinite(n)) {
+                  setMaxStores(3);
+                  return;
+                }
+                setMaxStores(Math.min(5, Math.max(1, n)));
+              }}
+              placeholder="3"
+            />
 
             <View style={styles.statusRow}>
               <Text style={styles.statusLabel}>Status</Text>

@@ -104,6 +104,14 @@ class AppStoreAllocationOut(BaseModel):
     total: float
 
 
+class AppFallbackPriceOut(BaseModel):
+    canonical_id: int
+    store_id: int
+    store_name: str
+    price: float
+    price_date: str
+
+
 class AppOptimizationResultOut(BaseModel):
     success: bool
     message: str
@@ -113,6 +121,10 @@ class AppOptimizationResultOut(BaseModel):
     savings: float
     savings_percent: float
     items_without_price: List[int]
+    items_outside_selected_stores: List[int] = []
+    unoptimized_prices: List[AppFallbackPriceOut] = []
+    fallback_prices: List[AppFallbackPriceOut] = []
+    price_lookback_days: int = 15
 
 
 class AppOptimizationItemIn(BaseModel):
@@ -369,7 +381,7 @@ def optimize_local_payload(
             items_without_price=[it.canonical_id for it in data.items],
         )
 
-    allocations = optimizer._greedy_allocate(item_prices, int(data.max_stores))
+    allocations, items_outside_item_ids = optimizer._greedy_allocate(item_prices, int(data.max_stores))
     total_cost = float(sum(a.total for a in allocations))
     total_if_single_store = float(optimizer._calculate_single_store_cost(item_prices))
     savings = float(total_if_single_store - total_cost)
@@ -410,8 +422,44 @@ def optimize_local_payload(
             )
         )
 
-    items_with_price = {ip.canonical_id for ip in item_prices}
-    items_without_price = [it.canonical_id for it in temp.items if it.canonical_id not in items_with_price]
+    items_with_recent_price = {ip.canonical_id for ip in item_prices}
+    items_without_price = [it.canonical_id for it in temp.items if it.canonical_id not in items_with_recent_price]
+
+    outside_canonical_ids = sorted(set(int(x) for x in items_outside_item_ids))
+
+    # Preços para itens que têm preço recente mas ficaram fora dos supermercados selecionados.
+    unoptimized_prices: list[AppFallbackPriceOut] = []
+    for item_id in items_outside_item_ids:
+        candidates = [ip for ip in item_prices if ip.item_id == item_id]
+        if not candidates:
+            continue
+        best = min(candidates, key=lambda x: x.price)
+        unoptimized_prices.append(
+            AppFallbackPriceOut(
+                canonical_id=best.canonical_id,
+                store_id=best.store_id,
+                store_name=best.store_name,
+                price=float(best.price),
+                price_date=best.price_date.isoformat() if best.price_date else "",
+            )
+        )
+
+    # Fallback: preços mais recentes disponíveis (mesmo que antigos) para itens sem preço recente.
+    fallback_map = optimizer._get_fallback_prices(items_without_price, eligible_store_ids)
+    fallback_prices: list[AppFallbackPriceOut] = []
+    for cid in items_without_price:
+        fp = fallback_map.get(cid)
+        if not fp:
+            continue
+        fallback_prices.append(
+            AppFallbackPriceOut(
+                canonical_id=fp.canonical_id,
+                store_id=fp.store_id,
+                store_name=fp.store_name,
+                price=float(fp.price),
+                price_date=fp.price_date.isoformat() if fp.price_date else "",
+            )
+        )
 
     return AppOptimizationResultOut(
         success=True,
@@ -422,6 +470,10 @@ def optimize_local_payload(
         savings=savings,
         savings_percent=savings_percent,
         items_without_price=items_without_price,
+        items_outside_selected_stores=outside_canonical_ids,
+        unoptimized_prices=unoptimized_prices,
+        fallback_prices=fallback_prices,
+        price_lookback_days=int(optimizer.price_lookback_days),
     )
 
 

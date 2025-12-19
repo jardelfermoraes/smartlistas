@@ -22,8 +22,18 @@ class ItemPrice:
     store_id: int
     store_name: str
     price: float
+    price_date: datetime
     quantity: float
     subtotal: float
+
+
+@dataclass
+class FallbackPrice:
+    canonical_id: int
+    store_id: int
+    store_name: str
+    price: float
+    price_date: datetime
 
 
 @dataclass
@@ -50,7 +60,7 @@ class OptimizationResult:
 class AppShoppingOptimizer:
     def __init__(self, db: Session):
         self.db = db
-        self.price_lookback_days = 30
+        self.price_lookback_days = 15
 
     def optimize_for_user_city(self, shopping_list_id: int, user_uf: str | None, user_city: str | None, radius_km: float) -> OptimizationResult:
         sl = self.db.get(AppShoppingList, shopping_list_id)
@@ -130,7 +140,7 @@ class AppShoppingOptimizer:
                 items_without_price=[it.id for it in sl.items],
             )
 
-        allocations = self._greedy_allocate(item_prices, max_stores)
+        allocations, _items_outside_item_ids = self._greedy_allocate(item_prices, max_stores)
         total_cost = sum(a.total for a in allocations)
         total_if_single_store = self._calculate_single_store_cost(item_prices)
         savings = total_if_single_store - total_cost
@@ -276,6 +286,7 @@ class AppShoppingOptimizer:
                     store_id=store.id,
                     store_name=store_name,
                     price=price.preco_por_unidade,
+                    price_date=price.data_coleta,
                     quantity=item.quantity,
                     subtotal=price.preco_por_unidade * item.quantity,
                 )
@@ -283,7 +294,58 @@ class AppShoppingOptimizer:
 
         return out
 
-    def _greedy_allocate(self, item_prices: list[ItemPrice], max_stores: int) -> list[StoreAllocation]:
+    def _get_fallback_prices(self, canonical_ids: list[int], eligible_store_ids: set[int]) -> dict[int, FallbackPrice]:
+        """Retorna o melhor preço disponível por item (mesmo que antigo) dentro das lojas elegíveis."""
+
+        if not canonical_ids or not eligible_store_ids:
+            return {}
+
+        latest_price_subq = (
+            self.db.query(
+                Price.canonical_id,
+                Price.loja_id,
+                func.max(Price.data_coleta).label("max_date"),
+            )
+            .filter(
+                Price.canonical_id.in_(canonical_ids),
+                Price.loja_id.in_(eligible_store_ids),
+            )
+            .group_by(Price.canonical_id, Price.loja_id)
+            .subquery()
+        )
+
+        prices = (
+            self.db.query(Price, Store)
+            .join(Store, Price.loja_id == Store.id)
+            .join(
+                latest_price_subq,
+                and_(
+                    Price.canonical_id == latest_price_subq.c.canonical_id,
+                    Price.loja_id == latest_price_subq.c.loja_id,
+                    Price.data_coleta == latest_price_subq.c.max_date,
+                ),
+            )
+            .all()
+        )
+
+        best_by_canonical: dict[int, FallbackPrice] = {}
+        for price, store in prices:
+            store_name = store.nome_fantasia or store.nome or "Loja"
+            candidate = FallbackPrice(
+                canonical_id=price.canonical_id,
+                store_id=store.id,
+                store_name=store_name,
+                price=price.preco_por_unidade,
+                price_date=price.data_coleta,
+            )
+
+            prev = best_by_canonical.get(price.canonical_id)
+            if prev is None or candidate.price < prev.price:
+                best_by_canonical[price.canonical_id] = candidate
+
+        return best_by_canonical
+
+    def _greedy_allocate(self, item_prices: list[ItemPrice], max_stores: int) -> tuple[list[StoreAllocation], list[int]]:
         prices_by_item: dict[int, list[ItemPrice]] = defaultdict(list)
         for ip in item_prices:
             prices_by_item[ip.item_id].append(ip)
@@ -291,22 +353,80 @@ class AppShoppingOptimizer:
         for item_id in prices_by_item:
             prices_by_item[item_id].sort(key=lambda x: x.price)
 
-        allocation: dict[int, list[ItemPrice]] = defaultdict(list)
+        max_stores = max(1, int(max_stores or 1))
+
+        # Mapa: store_id -> (item_id -> melhor ItemPrice naquela loja)
+        store_item_best: dict[int, dict[int, ItemPrice]] = defaultdict(dict)
         for item_id, prices in prices_by_item.items():
-            best = prices[0]
+            for p in prices:
+                prev = store_item_best[p.store_id].get(item_id)
+                if prev is None or p.price < prev.price:
+                    store_item_best[p.store_id][item_id] = p
+
+        candidate_stores = list(store_item_best.keys())
+        if not candidate_stores:
+            return [], list(prices_by_item.keys())
+
+        all_item_ids = list(prices_by_item.keys())
+        INF = 10**12
+        penalty_missing = 10**9
+
+        selected: list[int] = []
+        best_by_item: dict[int, ItemPrice] = {}
+
+        for _ in range(min(max_stores, len(candidate_stores))):
+            best_store: int | None = None
+            best_score = None
+
+            for sid in candidate_stores:
+                if sid in selected:
+                    continue
+
+                total = 0.0
+                missing = 0
+                for item_id in all_item_ids:
+                    current = best_by_item.get(item_id)
+                    cand = store_item_best[sid].get(item_id)
+                    if current is None and cand is None:
+                        missing += 1
+                        continue
+
+                    best_price = current.price if current else INF
+                    if cand and cand.price < best_price:
+                        best_price = cand.price
+                    if best_price >= INF:
+                        missing += 1
+                        continue
+
+                    qty = prices_by_item[item_id][0].quantity
+                    total += float(best_price) * float(qty)
+
+                score = float(total) + float(missing) * penalty_missing
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_store = sid
+
+            if best_store is None:
+                break
+
+            selected.append(best_store)
+            for item_id, cand in store_item_best[best_store].items():
+                current = best_by_item.get(item_id)
+                if current is None or cand.price < current.price:
+                    best_by_item[item_id] = cand
+
+            # Se já cobrimos todos os itens, podemos parar cedo.
+            if len(best_by_item) == len(all_item_ids):
+                break
+
+        allocation: dict[int, list[ItemPrice]] = defaultdict(list)
+        items_outside: list[int] = []
+        for item_id in all_item_ids:
+            best = best_by_item.get(item_id)
+            if best is None or best.store_id not in selected:
+                items_outside.append(item_id)
+                continue
             allocation[best.store_id].append(best)
-
-        # Se exceder max_stores, mantém as lojas com maior total e redistribui para elas (heurística simples)
-        if max_stores > 0 and len(allocation) > max_stores:
-            store_totals = {sid: sum(p.subtotal for p in items) for sid, items in allocation.items()}
-            top_store_ids = {sid for sid, _ in sorted(store_totals.items(), key=lambda x: x[1], reverse=True)[:max_stores]}
-
-            new_alloc: dict[int, list[ItemPrice]] = defaultdict(list)
-            for item_id, prices in prices_by_item.items():
-                best_in_top = min((p for p in prices if p.store_id in top_store_ids), key=lambda x: x.price, default=None)
-                chosen = best_in_top or prices[0]
-                new_alloc[chosen.store_id].append(chosen)
-            allocation = new_alloc
 
         result: list[StoreAllocation] = []
         for store_id, items in allocation.items():
@@ -328,7 +448,7 @@ class AppShoppingOptimizer:
             )
 
         result.sort(key=lambda x: x.total, reverse=True)
-        return result
+        return result, items_outside
 
     def _calculate_single_store_cost(self, item_prices: list[ItemPrice]) -> float:
         store_items: dict[int, set[int]] = defaultdict(set)
