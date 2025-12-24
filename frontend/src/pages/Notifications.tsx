@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Save, Send, Trash2 } from 'lucide-react';
 
 import {
+  api,
   AudienceFilter,
   NotificationRuleCreate,
   NotificationRuleTrigger,
@@ -36,7 +37,50 @@ export function NotificationsPage() {
   const [filters, setFilters] = useState({ state: '', city: '', gender: '' });
   const normalizedFilters = useMemo(() => normalizeFilters(filters), [filters]);
 
+  const [ufOptions, setUfOptions] = useState<string[]>([]);
+  const [sendCityOptions, setSendCityOptions] = useState<string[]>([]);
+
   const [sendForm, setSendForm] = useState({ title: '', body: '' });
+
+  type UfOut = { uf: string };
+  type CityOut = { city: string };
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await api.get<UfOut[]>('/app/locations/ufs');
+        setUfOptions(res.data.map((u) => u.uf));
+      } catch {
+        setUfOptions([]);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    const uf = filters.state.trim().toUpperCase();
+    if (!uf || uf.length !== 2) {
+      setSendCityOptions([]);
+      if (filters.city) {
+        setFilters((prev) => ({ ...prev, city: '' }));
+      }
+      return;
+    }
+
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await api.get<CityOut[]>('/app/locations/cities', {
+            params: { uf, search: filters.city.trim(), limit: 50 },
+          });
+          setSendCityOptions(res.data.map((c) => c.city));
+        } catch {
+          setSendCityOptions([]);
+        }
+      })();
+    }, 200);
+
+    return () => clearTimeout(t);
+  }, [filters.state, filters.city]);
 
   const { data: audience, isLoading: isAudienceLoading } = useQuery({
     queryKey: ['notifications-audience', normalizedFilters],
@@ -78,6 +122,64 @@ export function NotificationsPage() {
     city: '',
     gender: '',
   });
+
+  const [ruleCityOptions, setRuleCityOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    const uf = ruleForm.state.trim().toUpperCase();
+    if (!uf || uf.length !== 2) {
+      setRuleCityOptions([]);
+      if (ruleForm.city) {
+        setRuleForm((prev) => ({ ...prev, city: '' }));
+      }
+      return;
+    }
+
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await api.get<CityOut[]>('/app/locations/cities', {
+            params: { uf, search: ruleForm.city.trim(), limit: 50 },
+          });
+          setRuleCityOptions(res.data.map((c) => c.city));
+        } catch {
+          setRuleCityOptions([]);
+        }
+      })();
+    }, 200);
+
+    return () => clearTimeout(t);
+  }, [ruleForm.state, ruleForm.city]);
+
+  const rulesQueryErrorMessage = useMemo(() => {
+    if (!rulesQuery.isError) return '';
+    const err = rulesQuery.error as any;
+    const status = err?.response?.status;
+    const detail =
+      (typeof err?.response?.data?.detail === 'string' && err.response.data.detail) ||
+      (typeof err?.response?.data === 'string' && err.response.data) ||
+      err?.message ||
+      'Falha ao carregar regras';
+    if (!err?.response) {
+      return 'Falha de rede (possível CORS). O backend precisa permitir https://admin.smartlistas.com.br.';
+    }
+    return status ? `${detail} (HTTP ${status})` : detail;
+  }, [rulesQuery.error, rulesQuery.isError]);
+
+  const sendErrorMessage = useMemo(() => {
+    if (!sendMutation.isError) return '';
+    const err = sendMutation.error as any;
+    const status = err?.response?.status;
+    const detail =
+      (typeof err?.response?.data?.detail === 'string' && err.response.data.detail) ||
+      (typeof err?.response?.data === 'string' && err.response.data) ||
+      err?.message ||
+      'Falha ao enviar';
+    if (!err?.response) {
+      return 'Falha de rede (possível CORS). O backend precisa permitir https://admin.smartlistas.com.br.';
+    }
+    return status ? `${detail} (HTTP ${status})` : detail;
+  }, [sendMutation.error, sendMutation.isError]);
 
   const createRuleMutation = useMutation({
     mutationFn: (payload: NotificationRuleCreate) => notificationsAdminApi.createRule(payload).then((r) => r.data),
@@ -160,13 +262,18 @@ export function NotificationsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">UF</label>
-                <input
+                <select
                   className="input"
                   value={filters.state}
-                  onChange={(e) => setFilters({ ...filters, state: e.target.value })}
-                  placeholder="SP"
-                  maxLength={2}
-                />
+                  onChange={(e) => setFilters({ ...filters, state: e.target.value, city: '' })}
+                >
+                  <option value="">Todas</option>
+                  {ufOptions.map((uf) => (
+                    <option key={uf} value={uf}>
+                      {uf}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
@@ -175,7 +282,14 @@ export function NotificationsPage() {
                   value={filters.city}
                   onChange={(e) => setFilters({ ...filters, city: e.target.value })}
                   placeholder="São Paulo"
+                  list="send-city-options"
+                  disabled={!filters.state || filters.state.trim().length !== 2}
                 />
+                <datalist id="send-city-options">
+                  {sendCityOptions.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Gênero</label>
@@ -252,7 +366,7 @@ export function NotificationsPage() {
                 Enviado: {sendMutation.data.sent} / {sendMutation.data.requested_tokens} (falhas: {sendMutation.data.failures})
               </div>
             ) : null}
-            {sendMutation.isError ? <div className="text-sm text-red-700">Falha ao enviar.</div> : null}
+            {sendMutation.isError ? <div className="text-sm text-red-700">{sendErrorMessage}</div> : null}
           </div>
         </div>
       ) : (
@@ -282,6 +396,7 @@ export function NotificationsPage() {
               </div>
 
               {rulesQuery.isLoading ? <div className="text-sm text-gray-500">Carregando...</div> : null}
+              {rulesQuery.isError ? <div className="text-sm text-red-700">{rulesQueryErrorMessage}</div> : null}
 
               <div className="space-y-2">
                 {rules.length === 0 ? (
@@ -379,11 +494,33 @@ export function NotificationsPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">UF</label>
-                  <input className="input" value={ruleForm.state} onChange={(e) => setRuleForm({ ...ruleForm, state: e.target.value })} maxLength={2} />
+                  <select
+                    className="input"
+                    value={ruleForm.state}
+                    onChange={(e) => setRuleForm({ ...ruleForm, state: e.target.value, city: '' })}
+                  >
+                    <option value="">Todas</option>
+                    {ufOptions.map((uf) => (
+                      <option key={uf} value={uf}>
+                        {uf}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Cidade</label>
-                  <input className="input" value={ruleForm.city} onChange={(e) => setRuleForm({ ...ruleForm, city: e.target.value })} />
+                  <input
+                    className="input"
+                    value={ruleForm.city}
+                    onChange={(e) => setRuleForm({ ...ruleForm, city: e.target.value })}
+                    list="rule-city-options"
+                    disabled={!ruleForm.state || ruleForm.state.trim().length !== 2}
+                  />
+                  <datalist id="rule-city-options">
+                    {ruleCityOptions.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Gênero</label>
