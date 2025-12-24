@@ -143,8 +143,8 @@ class AppShoppingOptimizer:
         allocations, _items_outside_item_ids = self._greedy_allocate(item_prices, max_stores)
         total_cost = sum(a.total for a in allocations)
         total_if_single_store = self._calculate_single_store_cost(item_prices)
-        savings = total_if_single_store - total_cost
-        savings_percent = (savings / total_if_single_store * 100) if total_if_single_store > 0 else 0
+        savings = max(0.0, total_if_single_store - total_cost)
+        savings_percent = (savings / total_if_single_store * 100) if total_if_single_store > 0 and savings > 0 else 0
 
         items_with_price = {ip.item_id for ip in item_prices}
         items_without_price = [it.id for it in sl.items if it.id not in items_with_price]

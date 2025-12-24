@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "230554546760",
+    "project_id": "smartlistas-ccafa",
+    "storage_bucket": "smartlistas-ccafa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:230554546760:android:484f97abb2afd1fa9a9e7d",
+        "android_client_info": {
+          "package_name": "com.melhorcompra.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAW5CgrrbkOsaUXdIOci54YIl3rreTQpAk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

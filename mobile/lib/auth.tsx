@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiPost, apiPut } from '@/lib/api';
+import { registerForPushNotificationsAsync } from '@/lib/notifications';
 import { storage } from '@/lib/storage';
 
 export type AppUser = {
@@ -48,12 +49,14 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const TOKENS_KEY = 'melhorcompra.auth.tokens.v1';
 const USER_KEY = 'melhorcompra.auth.user.v1';
+const PUSH_TOKEN_SENT_KEY = 'smartlistas.push_token.sent.v1';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [tokens, setTokens] = useState<AuthTokens | null>(null);
   const [user, setUser] = useState<AppUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
+  const pushSyncInFlightRef = useRef<Promise<void> | null>(null);
 
   function clearSession() {
     setTokens(null);
@@ -96,6 +99,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!tokens?.access_token || !user?.id) return;
+    if (pushSyncInFlightRef.current) return;
+
+    pushSyncInFlightRef.current = (async () => {
+      try {
+        const expoPushToken = await registerForPushNotificationsAsync();
+        if (!expoPushToken || cancelled) return;
+
+        const lastSent = await storage.getItem(PUSH_TOKEN_SENT_KEY);
+        if (lastSent === expoPushToken) return;
+
+        try {
+          await apiPost(
+            '/app/me/push-token',
+            {
+              expo_push_token: expoPushToken,
+              provider: 'expo',
+            },
+            { token: tokens.access_token }
+          );
+          await storage.setItem(PUSH_TOKEN_SENT_KEY, expoPushToken);
+        } catch {
+          // tolerate missing endpoint / backend not ready
+        }
+      } finally {
+        pushSyncInFlightRef.current = null;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tokens?.access_token, user?.id]);
 
   const value = useMemo<AuthContextValue>(() => {
     const refreshAccessTokenImpl = async (): Promise<string | null> => {

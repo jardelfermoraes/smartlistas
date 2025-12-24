@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet } from 'react-native';
 
 import { Text } from '@/components/Themed';
@@ -8,10 +8,11 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/lib/auth';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { isLoading, isAuthenticated, signUpWithEmail } = useAuth();
 
   const [name, setName] = useState('');
@@ -34,6 +35,98 @@ export default function SignupScreen() {
     { value: 'other', label: 'Outro' },
     { value: 'prefer_not_say', label: 'Prefiro não informar' },
   ];
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        card: {
+          width: '100%',
+          maxWidth: 420,
+          padding: theme.spacing.xl,
+        },
+        brand: {
+          fontSize: theme.font.size.xl,
+          fontWeight: theme.font.weight.extrabold,
+          color: theme.colors.brand.primary,
+        },
+        subtitle: {
+          marginTop: theme.spacing.xs,
+          marginBottom: theme.spacing.md,
+          color: theme.colors.text.secondary,
+        },
+        errorText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.danger.text,
+          fontSize: theme.font.size.xs,
+        },
+        linkWrap: {
+          marginTop: theme.spacing.sm,
+          paddingVertical: theme.spacing.xs,
+          alignItems: 'center',
+        },
+        linkPressed: {
+          opacity: 0.8,
+        },
+        linkText: {
+          color: theme.colors.text.secondary,
+          fontSize: theme.font.size.sm,
+          fontWeight: theme.font.weight.semibold,
+        },
+        selectField: {
+          marginTop: theme.spacing.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          borderRadius: theme.radius.md,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        selectLabel: {
+          fontSize: 12,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.muted,
+        },
+        selectValue: {
+          marginTop: 6,
+          fontSize: theme.font.size.md,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.primary,
+        },
+        modalOverlay: {
+          flex: 1,
+          backgroundColor: 'rgba(2, 6, 23, 0.55)',
+          padding: theme.spacing.lg,
+          justifyContent: 'center',
+        },
+        modalCard: {
+          backgroundColor: theme.colors.bg.surface,
+          borderRadius: theme.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          padding: theme.spacing.lg,
+        },
+        modalTitle: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        optionRow: {
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border.subtle,
+        },
+        optionText: {
+          fontSize: theme.font.size.md,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.primary,
+        },
+      }),
+    [theme]
+  );
 
   function formatPhone(input: string): string {
     const digits = input.replace(/\D/g, '').slice(0, 11);
@@ -197,90 +290,3 @@ export default function SignupScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    padding: theme.spacing.lg,
-  },
-  brand: {
-    fontSize: theme.font.size.xl,
-    fontWeight: theme.font.weight.extrabold,
-    color: theme.colors.brand.primary,
-  },
-  subtitle: {
-    marginTop: theme.spacing.xs,
-    marginBottom: theme.spacing.sm,
-    color: theme.colors.text.secondary,
-  },
-  errorText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.danger.text,
-    fontSize: theme.font.size.xs,
-  },
-  linkWrap: {
-    marginTop: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    alignItems: 'center',
-  },
-  linkPressed: {
-    opacity: 0.8,
-  },
-  linkText: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.font.size.sm,
-  },
-  selectField: {
-    marginTop: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  selectLabel: {
-    fontSize: 12,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.muted,
-  },
-  selectValue: {
-    marginTop: 6,
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.primary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.55)',
-    padding: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  modalCard: {
-    backgroundColor: theme.colors.bg.surface,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  optionRow: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
-  },
-  optionText: {
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.primary,
-  },
-});

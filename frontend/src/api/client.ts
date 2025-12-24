@@ -190,6 +190,66 @@ export const billingApi = {
   updateSettings: (data: BillingSettings) => api.put<BillingSettings>('/app/admin/billing/settings', data),
 };
 
+export type AudienceFilter = {
+  state?: string | null;
+  city?: string | null;
+  gender?: string | null;
+};
+
+export type AudienceCount = {
+  user_count: number;
+  token_count: number;
+};
+
+export type SendNotificationPayload = {
+  title: string;
+  body?: string;
+  data?: Record<string, unknown>;
+  filters?: AudienceFilter;
+};
+
+export type SendNotificationResult = {
+  requested_tokens: number;
+  sent: number;
+  failures: number;
+};
+
+export type NotificationRuleTrigger = 'manual' | 'price_drop' | 'inactivity' | 'weekly_summary' | 'custom';
+
+export type NotificationRule = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: NotificationRuleTrigger;
+  filters: AudienceFilter;
+  title: string;
+  body: string;
+  data?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type NotificationRuleCreate = {
+  name: string;
+  enabled: boolean;
+  trigger: NotificationRuleTrigger;
+  filters: AudienceFilter;
+  title: string;
+  body: string;
+  data?: Record<string, unknown> | null;
+};
+
+export type NotificationRuleUpdate = Partial<NotificationRuleCreate>;
+
+export const notificationsAdminApi = {
+  audience: (filters?: AudienceFilter) => api.post<AudienceCount>('/app/admin/notifications/audience', filters ?? null),
+  send: (payload: SendNotificationPayload) => api.post<SendNotificationResult>('/app/admin/notifications/send', payload),
+  listRules: () => api.get<NotificationRule[]>('/app/admin/notifications/rules'),
+  createRule: (data: NotificationRuleCreate) => api.post<NotificationRule>('/app/admin/notifications/rules', data),
+  updateRule: (id: string, data: NotificationRuleUpdate) => api.put<NotificationRule>(`/app/admin/notifications/rules/${id}`, data),
+  deleteRule: (id: string) => api.delete<{ ok: boolean }>(`/app/admin/notifications/rules/${id}`),
+};
+
 export interface AppPayment {
   id: number;
   user_id: number;

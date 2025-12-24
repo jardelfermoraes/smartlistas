@@ -384,8 +384,8 @@ def optimize_local_payload(
     allocations, items_outside_item_ids = optimizer._greedy_allocate(item_prices, int(data.max_stores))
     total_cost = float(sum(a.total for a in allocations))
     total_if_single_store = float(optimizer._calculate_single_store_cost(item_prices))
-    savings = float(total_if_single_store - total_cost)
-    savings_percent = float((savings / total_if_single_store * 100) if total_if_single_store > 0 else 0.0)
+    savings = float(max(0.0, total_if_single_store - total_cost))
+    savings_percent = float((savings / total_if_single_store * 100) if total_if_single_store > 0 and savings > 0 else 0.0)
 
     canonical_ids = [it.canonical_id for it in temp.items]
     products = db.query(CanonicalProduct).filter(CanonicalProduct.id.in_(canonical_ids)).all()

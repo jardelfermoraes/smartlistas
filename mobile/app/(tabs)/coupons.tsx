@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { apiGet, apiPost } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 type SubmissionOut = {
   id: number;
@@ -38,6 +38,7 @@ function formatDate(iso: string): string {
 
 export default function CouponsScreen() {
   const { tokens, refreshAccessToken } = useAuth();
+  const theme = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
 
   const [mode, setMode] = useState<'qr' | 'barcode' | 'manual'>('qr');
@@ -54,6 +55,149 @@ export default function CouponsScreen() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const derivedChave = useMemo(() => extractChaveFromText(rawText), [rawText]);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        headerRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        },
+        title: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        refreshBtn: {
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 999,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        refreshText: {
+          fontSize: 12,
+          fontWeight: '700',
+          color: theme.colors.text.muted,
+        },
+        card: {
+          marginTop: theme.spacing.md,
+        },
+        cardHeaderRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        },
+        cardTitle: {
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        cardText: {
+          marginTop: theme.spacing.xs,
+          color: theme.colors.text.muted,
+        },
+        actionsRow: {
+          marginTop: theme.spacing.md,
+          flexDirection: 'row',
+          gap: 10,
+        },
+        actionBtn: {
+          flex: 1,
+          height: 42,
+        },
+        submitBtn: {
+          flex: 1,
+          height: 46,
+        },
+        previewOk: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.brand.primaryDark,
+          fontSize: theme.font.size.xs,
+          fontWeight: '700',
+        },
+        previewWarn: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.text.muted,
+          fontSize: theme.font.size.xs,
+          fontWeight: '600',
+        },
+        errorText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.danger.text,
+          fontSize: theme.font.size.xs,
+        },
+        successText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.brand.primaryDark,
+          fontSize: theme.font.size.xs,
+          fontWeight: '700',
+        },
+        historyRow: {
+          marginTop: theme.spacing.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          borderRadius: theme.radius.md,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        historyTitle: {
+          fontWeight: '800',
+          fontSize: 12,
+          color: theme.colors.text.primary,
+        },
+        historySub: {
+          marginTop: 4,
+          fontSize: 12,
+          color: theme.colors.text.muted,
+        },
+        modalOverlay: {
+          flex: 1,
+          backgroundColor: 'rgba(2, 6, 23, 0.55)',
+          padding: theme.spacing.lg,
+          justifyContent: 'center',
+        },
+        modalCard: {
+          backgroundColor: theme.colors.bg.surface,
+          borderRadius: theme.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          padding: theme.spacing.lg,
+        },
+        modalTitle: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        modalSub: {
+          marginTop: 6,
+          marginBottom: theme.spacing.md,
+          fontSize: theme.font.size.sm,
+          color: theme.colors.text.muted,
+        },
+        modalActions: {
+          marginTop: theme.spacing.md,
+          flexDirection: 'row',
+          gap: 10,
+        },
+        modalBtn: {
+          flex: 1,
+          height: 42,
+        },
+        cameraBox: {
+          width: '100%',
+          height: 320,
+          borderRadius: theme.radius.md,
+          overflow: 'hidden',
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surfaceAlt,
+        },
+      }),
+    [theme]
+  );
 
   useEffect(() => {
     setChave(derivedChave);
@@ -244,142 +388,3 @@ export default function CouponsScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  title: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  refreshBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  refreshText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text.muted,
-  },
-  card: {
-    marginTop: theme.spacing.md,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  cardTitle: {
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  cardText: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.text.muted,
-  },
-  actionsRow: {
-    marginTop: theme.spacing.md,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 42,
-  },
-  submitBtn: {
-    flex: 1,
-    height: 46,
-  },
-  previewOk: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.brand.primaryDark,
-    fontSize: theme.font.size.xs,
-    fontWeight: '700',
-  },
-  previewWarn: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.text.muted,
-    fontSize: theme.font.size.xs,
-    fontWeight: '600',
-  },
-  errorText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.danger.text,
-    fontSize: theme.font.size.xs,
-  },
-  successText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.brand.primaryDark,
-    fontSize: theme.font.size.xs,
-    fontWeight: '700',
-  },
-  historyRow: {
-    marginTop: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  historyTitle: {
-    fontWeight: '800',
-    fontSize: 12,
-    color: theme.colors.text.primary,
-  },
-  historySub: {
-    marginTop: 4,
-    fontSize: 12,
-    color: theme.colors.text.muted,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.55)',
-    padding: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  modalCard: {
-    backgroundColor: theme.colors.bg.surface,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  modalSub: {
-    marginTop: 6,
-    marginBottom: theme.spacing.md,
-    fontSize: theme.font.size.sm,
-    color: theme.colors.text.muted,
-  },
-  modalActions: {
-    marginTop: theme.spacing.md,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalBtn: {
-    flex: 1,
-    height: 42,
-  },
-  cameraBox: {
-    width: '100%',
-    height: 320,
-    borderRadius: theme.radius.md,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surfaceAlt,
-  },
-});

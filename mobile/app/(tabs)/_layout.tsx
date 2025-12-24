@@ -3,10 +3,8 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Link, Tabs } from 'expo-router';
 import { Pressable } from 'react-native';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
 import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 // You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
@@ -17,17 +15,16 @@ function TabBarIcon(props: {
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
-  const isDark = (colorScheme ?? 'light') === 'dark';
+  const theme = useTheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        tabBarInactiveTintColor: Colors[colorScheme ?? 'light'].tabIconDefault,
+        tabBarActiveTintColor: theme.colors.brand.primary,
+        tabBarInactiveTintColor: theme.colors.text.muted,
         tabBarStyle: {
-          backgroundColor: isDark ? '#0b1220' : '#ffffff',
-          borderTopColor: isDark ? 'rgba(148,163,184,0.25)' : theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+          borderTopColor: theme.colors.border.subtle,
           borderTopWidth: 1,
         },
         tabBarLabelStyle: {
@@ -59,7 +56,7 @@ export default function TabLayout() {
                   <FontAwesome
                     name="info-circle"
                     size={25}
-                    color={Colors[colorScheme ?? 'light'].text}
+                    color={theme.colors.text.primary}
                     style={{ marginRight: 15, opacity: pressed ? 0.5 : 1 }}
                   />
                 )}
@@ -80,6 +77,13 @@ export default function TabLayout() {
         options={{
           title: 'Enviar cupom',
           tabBarIcon: ({ color }) => <TabBarIcon name="qrcode" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: 'Mensagens',
+          tabBarIcon: ({ color }) => <TabBarIcon name="bell" color={color} />,
         }}
       />
       <Tabs.Screen

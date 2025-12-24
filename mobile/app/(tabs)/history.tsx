@@ -9,7 +9,7 @@ import { Screen } from '@/components/ui/Screen';
 import { apiGet } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { newId, upsertShoppingList } from '@/lib/shoppingLists';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 type PurchaseItemOut = {
   id: number;
@@ -48,12 +48,202 @@ function formatDate(iso: string): string {
 export default function HistoryScreen() {
   const { tokens, refreshAccessToken } = useAuth();
   const router = useRouter();
+  const theme = useTheme();
 
   const [items, setItems] = useState<PurchaseOut[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<PurchaseOut | null>(null);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        headerRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: theme.spacing.md,
+        },
+        title: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        refreshBtn: {
+          height: 40,
+          paddingHorizontal: 12,
+          borderRadius: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        refreshText: {
+          fontSize: 12,
+          fontWeight: '700',
+          color: theme.colors.text.primary,
+        },
+        card: {
+          marginTop: theme.spacing.sm,
+        },
+        cardTitle: {
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        cardText: {
+          marginTop: theme.spacing.xs,
+          color: theme.colors.text.muted,
+        },
+        summaryRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: theme.spacing.sm,
+        },
+        summaryLabel: {
+          color: theme.colors.text.muted,
+          fontSize: 12,
+          fontWeight: '700',
+        },
+        summaryValue: {
+          color: theme.colors.text.primary,
+          fontSize: 12,
+          fontWeight: '800',
+        },
+        errorText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.danger.text,
+          fontSize: theme.font.size.xs,
+        },
+        warnText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.text.muted,
+          fontSize: theme.font.size.xs,
+          fontWeight: '600',
+        },
+        listContent: {
+          paddingTop: 12,
+          paddingBottom: 24,
+        },
+        emptyText: {
+          color: theme.colors.text.muted,
+          marginTop: theme.spacing.md,
+          textAlign: 'center',
+        },
+        purchaseCard: {
+          marginTop: theme.spacing.sm,
+        },
+        purchaseTop: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+        },
+        purchaseTitle: {
+          fontWeight: '800',
+          color: theme.colors.text.primary,
+          flex: 1,
+        },
+        badge: {
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surfaceAlt,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: 999,
+        },
+        badgeText: {
+          fontSize: 12,
+          fontWeight: '800',
+          color: theme.colors.text.muted,
+        },
+        purchaseBottom: {
+          marginTop: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        },
+        metaText: {
+          color: theme.colors.text.muted,
+          fontSize: 12,
+          fontWeight: '600',
+        },
+        modalOverlay: {
+          flex: 1,
+          backgroundColor: 'rgba(2, 6, 23, 0.55)',
+          padding: theme.spacing.lg,
+          justifyContent: 'center',
+        },
+        modalCard: {
+          backgroundColor: theme.colors.bg.surface,
+          borderRadius: theme.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          padding: theme.spacing.lg,
+        },
+        modalTitle: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        modalSub: {
+          marginTop: 6,
+          marginBottom: theme.spacing.md,
+          fontSize: theme.font.size.sm,
+          color: theme.colors.text.muted,
+        },
+        itemRow: {
+          marginTop: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+        },
+        checkBox: {
+          width: 22,
+          height: 22,
+          borderRadius: 8,
+          borderWidth: 2,
+          borderColor: theme.colors.border.subtle,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.colors.bg.surface,
+        },
+        checkBoxChecked: {
+          borderColor: theme.colors.text.primary,
+        },
+        checkDot: {
+          width: 10,
+          height: 10,
+          borderRadius: 4,
+          backgroundColor: theme.colors.text.primary,
+        },
+        itemInfo: {
+          flex: 1,
+        },
+        itemName: {
+          fontWeight: '700',
+          color: theme.colors.text.primary,
+        },
+        itemSub: {
+          marginTop: 4,
+          color: theme.colors.text.muted,
+          fontSize: 12,
+        },
+        modalActions: {
+          marginTop: theme.spacing.md,
+          flexDirection: 'row',
+          gap: 10,
+        },
+        modalBtn: {
+          flex: 1,
+          height: 42,
+        },
+      }),
+    [theme]
+  );
 
   const totalPurchases = items.length;
   const totalChecked = useMemo(() => items.reduce((acc, p) => acc + p.items.filter((it) => Boolean(it.is_checked)).length, 0), [items]);
@@ -242,188 +432,3 @@ export default function HistoryScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: theme.spacing.md,
-  },
-  title: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  refreshBtn: {
-    height: 40,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  refreshText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-  },
-  card: {
-    marginTop: theme.spacing.sm,
-  },
-  cardTitle: {
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  cardText: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.text.muted,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: theme.spacing.sm,
-  },
-  summaryLabel: {
-    color: theme.colors.text.muted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  summaryValue: {
-    color: theme.colors.text.primary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  errorText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.danger.text,
-    fontSize: theme.font.size.xs,
-  },
-  warnText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.text.muted,
-    fontSize: theme.font.size.xs,
-    fontWeight: '600',
-  },
-  listContent: {
-    paddingTop: 12,
-    paddingBottom: 24,
-  },
-  emptyText: {
-    color: theme.colors.text.muted,
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-  },
-  purchaseCard: {
-    marginTop: theme.spacing.sm,
-  },
-  purchaseTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  purchaseTitle: {
-    fontWeight: '800',
-    color: theme.colors.text.primary,
-    flex: 1,
-  },
-  badge: {
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surfaceAlt,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.text.muted,
-  },
-  purchaseBottom: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  metaText: {
-    color: theme.colors.text.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.55)',
-    padding: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  modalCard: {
-    backgroundColor: theme.colors.bg.surface,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  modalSub: {
-    marginTop: 6,
-    marginBottom: theme.spacing.md,
-    fontSize: theme.font.size.sm,
-    color: theme.colors.text.muted,
-  },
-  itemRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  checkBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: theme.colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.bg.surface,
-  },
-  checkBoxChecked: {
-    borderColor: theme.colors.text.primary,
-  },
-  checkDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 4,
-    backgroundColor: theme.colors.text.primary,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-  },
-  itemSub: {
-    marginTop: 4,
-    color: theme.colors.text.muted,
-    fontSize: 12,
-  },
-  modalActions: {
-    marginTop: theme.spacing.md,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalBtn: {
-    flex: 1,
-    height: 42,
-  },
-});

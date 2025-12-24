@@ -43,6 +43,12 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
+      - name: Publish OTA update (preview)
+        run: |
+          eas update --channel preview --platform android --non-interactive --message "CI update $GITHUB_SHA"
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
       - name: Build APK on EAS
         id: eas_build
         run: |

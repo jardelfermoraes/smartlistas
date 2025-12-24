@@ -20,6 +20,7 @@ from app.routers import (
     app_auth,
     app_billing,
     app_billing_admin,
+    app_notifications_admin,
     app_payments,
     app_payments_admin,
     app_receipt_keys,
@@ -122,6 +123,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(app_auth.router, prefix="/app", tags=["app-auth"])
 app.include_router(app_billing.router, prefix="/app", tags=["app-billing"])
 app.include_router(app_billing_admin.router, prefix="/app", tags=["app-billing-admin"])
+app.include_router(app_notifications_admin.router, prefix="/app", tags=["app-notifications-admin"])
 app.include_router(app_payments.router, prefix="/app", tags=["app-payments"])
 app.include_router(app_payments_admin.router, prefix="/app", tags=["app-payments-admin"])
 app.include_router(app_locations, prefix="/app", tags=["app-locations"])

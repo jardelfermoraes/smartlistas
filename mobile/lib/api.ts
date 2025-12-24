@@ -58,6 +58,12 @@ function getApiBaseUrl(): string {
 
 export const API_BASE_URL = getApiBaseUrl();
 
+function normalizePath(path: string): string {
+  const trimmed = (path ?? '').trim();
+  if (!trimmed) return '/';
+  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+}
+
 function getConnectionHint(): string | null {
   const isDevice = Boolean((Constants as any).isDevice);
   if (!isDevice) return null;
@@ -112,6 +118,7 @@ export async function apiGet<TResponse>(
   params?: Record<string, string | number | undefined>,
   options?: RequestOptions
 ): Promise<TResponse> {
+  const normalizedPath = normalizePath(path);
   const qs = params
     ? new URLSearchParams(
         Object.entries(params)
@@ -120,7 +127,7 @@ export async function apiGet<TResponse>(
       ).toString()
     : '';
 
-  const url = qs ? `${API_BASE_URL}${path}?${qs}` : `${API_BASE_URL}${path}`;
+  const url = qs ? `${API_BASE_URL}${normalizedPath}?${qs}` : `${API_BASE_URL}${normalizedPath}`;
   let res: Response;
   try {
     res = await fetchWithOptionalRefresh(
@@ -134,10 +141,13 @@ export async function apiGet<TResponse>(
       },
       options
     );
-  } catch {
+  } catch (err) {
     const hint = getConnectionHint();
+    const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      hint ? `Falha de conexão com a API (${API_BASE_URL}). ${hint}` : `Falha de conexão com a API (${API_BASE_URL}). Verifique a URL/servidor.`
+      hint
+        ? `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. ${hint}`
+        : `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. Verifique a URL/servidor.`
     );
   }
 
@@ -150,8 +160,9 @@ export async function apiGet<TResponse>(
 
 export async function apiDelete(path: string, options?: RequestOptions): Promise<void> {
   let res: Response;
+  const normalizedPath = normalizePath(path);
+  const url = `${API_BASE_URL}${normalizedPath}`;
   try {
-    const url = `${API_BASE_URL}${path}`;
     res = await fetchWithOptionalRefresh(
       url,
       {
@@ -163,10 +174,13 @@ export async function apiDelete(path: string, options?: RequestOptions): Promise
       },
       options
     );
-  } catch {
+  } catch (err) {
     const hint = getConnectionHint();
+    const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      hint ? `Falha de conexão com a API (${API_BASE_URL}). ${hint}` : `Falha de conexão com a API (${API_BASE_URL}). Verifique a URL/servidor.`
+      hint
+        ? `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. ${hint}`
+        : `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. Verifique a URL/servidor.`
     );
   }
 
@@ -177,8 +191,9 @@ export async function apiDelete(path: string, options?: RequestOptions): Promise
 
 export async function apiPut<TResponse>(path: string, body: unknown, options?: RequestOptions): Promise<TResponse> {
   let res: Response;
+  const normalizedPath = normalizePath(path);
+  const url = `${API_BASE_URL}${normalizedPath}`;
   try {
-    const url = `${API_BASE_URL}${path}`;
     res = await fetchWithOptionalRefresh(
       url,
       {
@@ -192,10 +207,13 @@ export async function apiPut<TResponse>(path: string, body: unknown, options?: R
       },
       options
     );
-  } catch {
+  } catch (err) {
     const hint = getConnectionHint();
+    const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      hint ? `Falha de conexão com a API (${API_BASE_URL}). ${hint}` : `Falha de conexão com a API (${API_BASE_URL}). Verifique a URL/servidor.`
+      hint
+        ? `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. ${hint}`
+        : `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. Verifique a URL/servidor.`
     );
   }
 
@@ -208,8 +226,9 @@ export async function apiPut<TResponse>(path: string, body: unknown, options?: R
 
 export async function apiPost<TResponse>(path: string, body: unknown, options?: RequestOptions): Promise<TResponse> {
   let res: Response;
+  const normalizedPath = normalizePath(path);
+  const url = `${API_BASE_URL}${normalizedPath}`;
   try {
-    const url = `${API_BASE_URL}${path}`;
     res = await fetchWithOptionalRefresh(
       url,
       {
@@ -223,10 +242,13 @@ export async function apiPost<TResponse>(path: string, body: unknown, options?: 
       },
       options
     );
-  } catch {
+  } catch (err) {
     const hint = getConnectionHint();
+    const errMsg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      hint ? `Falha de conexão com a API (${API_BASE_URL}). ${hint}` : `Falha de conexão com a API (${API_BASE_URL}). Verifique a URL/servidor.`
+      hint
+        ? `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. ${hint}`
+        : `Falha de conexão com a API (${API_BASE_URL}). URL: ${url}. Erro: ${errMsg}. Verifique a URL/servidor.`
     );
   }
 

@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 
 import { Text } from '@/components/Themed';
+import { useThemeMode } from '@/components/useColorScheme';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/lib/auth';
+import { getPushPermissionInfo, registerForPushNotificationsAsync, requestPushPermissions } from '@/lib/notifications';
 import { apiGet } from '@/lib/api';
 import { useRouter } from 'expo-router';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 type UfOut = { uf: string };
 type CityOut = { city: string };
@@ -17,6 +19,12 @@ type CityOut = { city: string };
 export default function ProfileScreen() {
   const { user, signOut, updateProfile, isLoading } = useAuth();
   const router = useRouter();
+  const theme = useTheme();
+  const { mode: themeMode, setMode: setThemeMode } = useThemeMode();
+
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const [pushGranted, setPushGranted] = useState<boolean | null>(null);
+  const [pushLoading, setPushLoading] = useState(false);
 
   const [phone, setPhone] = useState('');
   const [birthDate, setBirthDate] = useState('');
@@ -38,6 +46,156 @@ export default function ProfileScreen() {
     { value: 'other', label: 'Outro' },
     { value: 'prefer_not_say', label: 'Prefiro não informar' },
   ];
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        scrollContent: {
+          paddingBottom: theme.spacing.xl,
+        },
+        title: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        card: {
+          marginTop: theme.spacing.md,
+        },
+        lineLabel: {
+          marginTop: theme.spacing.sm,
+          fontSize: theme.font.size.sm,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.muted,
+        },
+        lineValue: {
+          marginTop: theme.spacing.xs,
+          fontSize: theme.font.size.md,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.primary,
+        },
+        logoutButton: {
+          marginTop: theme.spacing.lg,
+        },
+        sectionTitle: {
+          marginTop: theme.spacing.lg,
+          fontSize: theme.font.size.md,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        actionsRow: {
+          marginTop: theme.spacing.md,
+          flexDirection: 'row',
+          gap: 10,
+        },
+        actionBtn: {
+          flex: 1,
+          height: 42,
+        },
+        saveButton: {
+          marginTop: theme.spacing.md,
+        },
+        errorText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.danger.text,
+          fontSize: theme.font.size.xs,
+        },
+        successText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.brand.primaryDark,
+          fontSize: theme.font.size.xs,
+        },
+        selectField: {
+          marginTop: theme.spacing.sm,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          borderRadius: theme.radius.md,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        selectLabel: {
+          fontSize: 12,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.muted,
+        },
+        selectValue: {
+          marginTop: 6,
+          fontSize: theme.font.size.md,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.primary,
+        },
+        modalOverlay: {
+          flex: 1,
+          backgroundColor: 'rgba(2, 6, 23, 0.55)',
+          padding: theme.spacing.lg,
+          justifyContent: 'center',
+        },
+        modalCard: {
+          backgroundColor: theme.colors.bg.surface,
+          borderRadius: theme.radius.lg,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          padding: theme.spacing.lg,
+        },
+        modalTitle: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        optionRow: {
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border.subtle,
+        },
+        optionText: {
+          fontSize: theme.font.size.md,
+          fontWeight: theme.font.weight.semibold,
+          color: theme.colors.text.primary,
+        },
+        emptyOptions: {
+          marginTop: theme.spacing.md,
+          textAlign: 'center',
+          color: theme.colors.text.muted,
+        },
+        themeRow: {
+          marginTop: theme.spacing.sm,
+          flexDirection: 'row',
+          gap: 8,
+          flexWrap: 'wrap',
+        },
+        themePill: {
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 999,
+        },
+        themePillActive: {
+          borderColor: theme.colors.text.primary,
+        },
+        themePillText: {
+          fontSize: 12,
+          fontWeight: '800',
+          color: theme.colors.text.muted,
+        },
+        themePillTextActive: {
+          color: theme.colors.text.primary,
+        },
+      }),
+    [theme]
+  );
+
+  const refreshPush = useCallback(async () => {
+    try {
+      const info = await getPushPermissionInfo();
+      setPushStatus(info.status);
+      setPushGranted(info.granted);
+    } catch {
+      setPushStatus('error');
+      setPushGranted(false);
+    }
+  }, []);
 
   function formatPhone(input: string): string {
     const digits = input.replace(/\D/g, '').slice(0, 11);
@@ -104,6 +262,10 @@ export default function ProfileScreen() {
     setCity(user?.city ?? '');
     setRadiusKm(String(user?.shopping_radius_km ?? 10));
   }, [user?.phone, user?.birth_date, user?.gender, user?.state, user?.city, user?.shopping_radius_km]);
+
+  useEffect(() => {
+    void refreshPush();
+  }, [refreshPush]);
 
   useEffect(() => {
     void (async () => {
@@ -222,6 +384,55 @@ export default function ProfileScreen() {
             </Text>
           </Pressable>
 
+          <Text style={styles.sectionTitle}>Notificações</Text>
+          <Text style={styles.lineLabel}>Status</Text>
+          <Text style={styles.lineValue}>
+            {pushStatus ? `${pushStatus}${pushGranted === null ? '' : ` • granted: ${String(pushGranted)}`}` : '-'}
+          </Text>
+          <View style={styles.actionsRow}>
+            <Button
+              variant="secondary"
+              onPress={() => {
+                setPushLoading(true);
+                void (async () => {
+                  try {
+                    await requestPushPermissions();
+                    await registerForPushNotificationsAsync();
+                    await refreshPush();
+                  } finally {
+                    setPushLoading(false);
+                  }
+                })();
+              }}
+              disabled={pushLoading}
+              style={styles.actionBtn}>
+              {pushGranted ? 'Notificações ativadas' : pushLoading ? 'Ativando...' : 'Ativar notificações'}
+            </Button>
+            <Button variant="secondary" onPress={() => void refreshPush()} disabled={pushLoading} style={styles.actionBtn}>
+              Atualizar
+            </Button>
+          </View>
+
+          <Text style={styles.sectionTitle}>Aparência</Text>
+          <Text style={styles.lineLabel}>Modo de visualização</Text>
+          <View style={styles.themeRow}>
+            <Pressable
+              style={[styles.themePill, themeMode === 'system' ? styles.themePillActive : null]}
+              onPress={() => setThemeMode('system')}>
+              <Text style={[styles.themePillText, themeMode === 'system' ? styles.themePillTextActive : null]}>Sistema</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.themePill, themeMode === 'light' ? styles.themePillActive : null]}
+              onPress={() => setThemeMode('light')}>
+              <Text style={[styles.themePillText, themeMode === 'light' ? styles.themePillTextActive : null]}>Claro</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.themePill, themeMode === 'dark' ? styles.themePillActive : null]}
+              onPress={() => setThemeMode('dark')}>
+              <Text style={[styles.themePillText, themeMode === 'dark' ? styles.themePillTextActive : null]}>Escuro</Text>
+            </Pressable>
+          </View>
+
           <Text style={styles.sectionTitle}>Localização</Text>
 
           <Pressable
@@ -311,113 +522,3 @@ export default function ProfileScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  scrollContent: {
-    paddingBottom: theme.spacing.xl,
-  },
-  title: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  card: {
-    marginTop: theme.spacing.md,
-  },
-  lineLabel: {
-    marginTop: theme.spacing.sm,
-    fontSize: theme.font.size.sm,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.muted,
-  },
-  lineValue: {
-    marginTop: theme.spacing.xs,
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.primary,
-  },
-  logoutButton: {
-    marginTop: theme.spacing.lg,
-  },
-  sectionTitle: {
-    marginTop: theme.spacing.lg,
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  actionsRow: {
-    marginTop: theme.spacing.md,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  actionBtn: {
-    flex: 1,
-    height: 42,
-  },
-  saveButton: {
-    marginTop: theme.spacing.md,
-  },
-  errorText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.danger.text,
-    fontSize: theme.font.size.xs,
-  },
-  successText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.brand.primaryDark,
-    fontSize: theme.font.size.xs,
-  },
-  selectField: {
-    marginTop: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  selectLabel: {
-    fontSize: 12,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.muted,
-  },
-  selectValue: {
-    marginTop: 6,
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.primary,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.55)',
-    padding: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  modalCard: {
-    backgroundColor: theme.colors.bg.surface,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  optionRow: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
-  },
-  optionText: {
-    fontSize: theme.font.size.md,
-    fontWeight: theme.font.weight.semibold,
-    color: theme.colors.text.primary,
-  },
-  emptyOptions: {
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-    color: theme.colors.text.muted,
-  },
-});

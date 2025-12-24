@@ -5,6 +5,7 @@ import {
   Package, 
   DollarSign, 
   Receipt, 
+  Bell,
   CreditCard,
   Menu,
   X,
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/app-receipt-keys', label: 'Chaves do App', icon: Smartphone },
   { path: '/app-payments', label: 'Pagamentos App', icon: CreditCard },
   { path: '/billing', label: 'Promoções', icon: CreditCard },
+  { path: '/notifications', label: 'Notificações', icon: Bell },
 ];
 
 export function Layout() {

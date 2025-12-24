@@ -8,7 +8,7 @@ import { Text, View } from '@/components/Themed';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { deleteShoppingList, loadShoppingLists, newId, ShoppingListDraft, upsertShoppingList } from '@/lib/shoppingLists';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 function statusLabel(status: string): string {
   switch (status) {
@@ -30,13 +30,6 @@ function statusLabel(status: string): string {
 type FilterKey = 'all' | 'active' | 'optimized' | 'completed';
 
 type ToneKey = 'draft' | 'in_progress' | 'optimized' | 'completed';
-
-const tones: Record<ToneKey, { bg: string; border: string; text: string }> = {
-  draft: { bg: theme.colors.bg.surfaceAlt, border: theme.colors.border.subtle, text: theme.colors.text.muted },
-  in_progress: { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
-  optimized: { bg: '#dcfce7', border: '#86efac', text: theme.colors.brand.primaryDark },
-  completed: { bg: '#eff6ff', border: '#93c5fd', text: '#1d4ed8' },
-};
 
 function isCompleted(list: ShoppingListDraft): boolean {
   return (list.status ?? 'draft') === 'completed';
@@ -86,9 +79,176 @@ function filterTone(filter: FilterKey): ToneKey {
 
 export default function ListsScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const [savedLists, setSavedLists] = useState<ShoppingListDraft[]>([]);
   const [filter, setFilter] = useState<FilterKey>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const tones: Record<ToneKey, { bg: string; border: string; text: string }> = useMemo(
+    () => {
+      if (theme.name === 'dark') {
+        return {
+          draft: { bg: theme.colors.bg.surfaceAlt, border: theme.colors.border.subtle, text: theme.colors.text.muted },
+          in_progress: { bg: 'rgba(245, 158, 11, 0.18)', border: 'rgba(245, 158, 11, 0.45)', text: '#fbbf24' },
+          optimized: { bg: 'rgba(59, 130, 246, 0.18)', border: 'rgba(59, 130, 246, 0.45)', text: theme.colors.brand.accent },
+          completed: { bg: theme.colors.bg.surfaceAlt, border: theme.colors.border.subtle, text: theme.colors.text.muted },
+        };
+      }
+      return {
+        draft: { bg: theme.colors.bg.surfaceAlt, border: theme.colors.border.subtle, text: theme.colors.text.muted },
+        in_progress: { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
+        optimized: { bg: '#dbeafe', border: '#93c5fd', text: theme.colors.brand.primaryDark },
+        completed: { bg: theme.colors.bg.surfaceAlt, border: theme.colors.border.subtle, text: theme.colors.text.muted },
+      };
+    },
+    [theme]
+  );
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        headerRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: theme.spacing.md,
+        },
+        title: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        iconBtn: {
+          height: 40,
+          width: 40,
+          borderRadius: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        filtersRow: {
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          gap: 8,
+          marginBottom: theme.spacing.md,
+        },
+        filterPill: {
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 999,
+        },
+        filterPillActive: {
+          borderColor: theme.colors.text.primary,
+        },
+        filterText: {
+          fontSize: 12,
+          fontWeight: '700',
+          color: theme.colors.text.muted,
+        },
+        filterTextActive: {
+          color: theme.colors.text.primary,
+        },
+        listContent: {
+          paddingTop: 12,
+          paddingBottom: 24,
+        },
+        emptyText: {
+          color: theme.colors.text.muted,
+          marginTop: theme.spacing.md,
+          textAlign: 'center',
+        },
+        cardRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 10,
+        },
+        cardMain: {
+          flex: 1,
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          borderRadius: theme.radius.md,
+          paddingHorizontal: 12,
+          paddingVertical: 12,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        trashBtn: {
+          marginLeft: 10,
+          height: 44,
+          width: 44,
+          borderRadius: 14,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
+        },
+        cardTop: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          backgroundColor: 'transparent',
+        },
+        badges: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          backgroundColor: 'transparent',
+        },
+        badge: {
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surfaceAlt,
+          paddingHorizontal: 10,
+          paddingVertical: 4,
+          borderRadius: 999,
+        },
+        badgeText: {
+          fontSize: 12,
+          fontWeight: '800',
+          color: theme.colors.text.muted,
+        },
+        itemName: {
+          fontWeight: '700',
+          color: theme.colors.text.primary,
+          flex: 1,
+          textTransform: 'uppercase',
+        },
+        cardBottom: {
+          marginTop: 8,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: 'transparent',
+        },
+        cardActionsRow: {
+          marginTop: 10,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          gap: 10,
+          backgroundColor: 'transparent',
+        },
+        cardActionBtn: {
+          height: 40,
+          paddingHorizontal: 12,
+          borderRadius: 12,
+        },
+        metaText: {
+          color: theme.colors.text.muted,
+          fontSize: 12,
+          fontWeight: '600',
+        },
+      }),
+    [theme]
+  );
 
   async function refreshLists() {
     const lists = await loadShoppingLists();
@@ -277,7 +437,10 @@ export default function ListsScreen() {
             <Pressable
               style={[
                 styles.cardMain,
-                { borderColor: tones[listTone(item)].border, backgroundColor: tones[listTone(item)].bg },
+                {
+                  borderColor: tones[listTone(item)].border,
+                  backgroundColor: theme.name === 'dark' ? theme.colors.bg.surface : tones[listTone(item)].bg,
+                },
               ]}
               onPress={() => openList(item)}>
               <View style={styles.cardTop}>
@@ -347,152 +510,3 @@ export default function ListsScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: theme.spacing.md,
-  },
-  title: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  iconBtn: {
-    height: 40,
-    width: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  filtersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: theme.spacing.md,
-  },
-  filterPill: {
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  filterPillActive: {
-    borderColor: theme.colors.text.primary,
-  },
-  filterText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text.muted,
-  },
-  filterTextActive: {
-    color: theme.colors.text.primary,
-  },
-  listContent: {
-    paddingTop: 12,
-    paddingBottom: 24,
-  },
-  emptyText: {
-    color: theme.colors.text.muted,
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-  },
-  cardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  cardMain: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  trashBtn: {
-    marginLeft: 10,
-    height: 44,
-    width: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    backgroundColor: 'transparent',
-  },
-  badges: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'transparent',
-  },
-  badge: {
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surfaceAlt,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  badgeOptimized: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#86efac',
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.text.muted,
-  },
-  badgeTextOptimized: {
-    color: theme.colors.brand.primaryDark,
-  },
-  itemName: {
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-    flex: 1,
-    textTransform: 'uppercase',
-  },
-  cardBottom: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'transparent',
-  },
-  cardActionsRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 10,
-    backgroundColor: 'transparent',
-  },
-  cardActionBtn: {
-    height: 40,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-  },
-  metaText: {
-    color: theme.colors.text.muted,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-});

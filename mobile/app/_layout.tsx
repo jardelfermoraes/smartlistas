@@ -6,8 +6,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { ThemeModeProvider, useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/lib/auth';
+import { startNotificationInboxListeners } from '@/lib/notifications';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -43,11 +44,23 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <ThemeModeProvider>
+      <RootLayoutNav />
+    </ThemeModeProvider>
+  );
 }
 
 function RootLayoutNav() {
+  return <RootLayoutNavInner />;
+}
+
+function RootLayoutNavInner() {
   const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    return startNotificationInboxListeners();
+  }, []);
 
   return (
     <AuthProvider>

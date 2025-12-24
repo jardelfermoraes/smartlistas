@@ -17,6 +17,7 @@ import { AppUsers } from './pages/AppUsers';
 import { AppReceiptKeys } from './pages/AppReceiptKeys';
 import { AppPayments } from './pages/AppPayments';
 import { BillingSettingsPage } from './pages/BillingSettings';
+import { NotificationsPage } from './pages/Notifications';
 import CanonicalProducts from './pages/CanonicalProducts';
 import { ReferralRedirect } from './pages/ReferralRedirect';
 import { AppSignup } from './pages/AppSignup';
@@ -97,6 +98,7 @@ function AppRoutes() {
         <Route path="app-receipt-keys" element={<AppReceiptKeys />} />
         <Route path="app-payments" element={<AppPayments />} />
         <Route path="billing" element={<BillingSettingsPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
       </Route>
     </Routes>
   );

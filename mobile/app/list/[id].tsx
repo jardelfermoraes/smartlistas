@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, StyleSheet } from 'react-native';
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -18,7 +18,7 @@ import {
   ShoppingListStatus,
   upsertShoppingList,
 } from '@/lib/shoppingLists';
-import { theme } from '@/lib/theme';
+import { AppTheme, useTheme } from '@/lib/theme';
 
 type CanonicalProduct = {
   id: number;
@@ -35,6 +35,17 @@ type CanonicalListResponse = {
   page_size: number;
   pages: number;
 };
+
+function optimizationSignature(items: ShoppingListDraft['items'], maxStores: number): string {
+  const pairs = (items ?? [])
+    .map((it) => ({ id: Number(it.canonical_id), q: Number(it.quantity) }))
+    .filter((x) => Number.isFinite(x.id) && Number.isFinite(x.q))
+    .sort((a, b) => a.id - b.id)
+    .map((x) => `${x.id}:${x.q}`)
+    .join('|');
+  const ms = Number.isFinite(maxStores) ? Math.min(5, Math.max(1, maxStores)) : 3;
+  return `${ms}|${pairs}`;
+}
 
 function canonicalTitle(s: CanonicalProduct): string {
   return (s.nome ?? '').trim() || 'Produto';
@@ -129,6 +140,8 @@ export default function ListDetailScreen() {
   const router = useRouter();
   const { id, autoOptimize } = useLocalSearchParams<{ id: string; autoOptimize?: string }>();
   const { tokens, refreshAccessToken } = useAuth();
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
   const [permission, requestPermission] = useCameraPermissions();
 
   const listId = typeof id === 'string' ? id : '';
@@ -156,6 +169,7 @@ export default function ListDetailScreen() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const didAutoOptimizeRef = useRef(false);
   const createdAtRef = useRef<string>(new Date().toISOString());
+  const optimizationSigRef = useRef<string | null>(null);
 
   const [editVisible, setEditVisible] = useState(false);
   const [expandedStoreIds, setExpandedStoreIds] = useState<Record<string, boolean>>({});
@@ -167,6 +181,10 @@ export default function ListDetailScreen() {
 
   const checkedCount = useMemo(() => draftItems.filter((it) => Boolean(it.is_checked)).length, [draftItems]);
   const hasOptimization = Boolean(optimization?.allocations?.length);
+  const currentOptimizationSignature = useMemo(
+    () => optimizationSignature(draftItems, maxStores),
+    [draftItems, maxStores]
+  );
 
   const effectiveStatus = useMemo(() => computeListStatus(draftStatus, draftItems), [draftStatus, draftItems]);
 
@@ -191,11 +209,26 @@ export default function ListDetailScreen() {
         setDraftStatus(existing.status ?? 'draft');
         setOptimization(existing.optimization ?? null);
         setMaxStores(existing.max_stores ?? 3);
+        optimizationSigRef.current = existing.optimization ? optimizationSignature(existing.items, existing.max_stores ?? 3) : null;
         setExpandedStoreIds({});
         createdAtRef.current = existing.created_at || createdAtRef.current;
       }
     })();
   }, [listId]);
+
+  useEffect(() => {
+    if (!optimization) return;
+    if (!optimizationSigRef.current) {
+      optimizationSigRef.current = currentOptimizationSignature;
+      return;
+    }
+    if (optimizationSigRef.current === currentOptimizationSignature) return;
+
+    setOptimization(null);
+    optimizationSigRef.current = null;
+    setExpandedStoreIds({});
+    if (draftStatus === 'optimized') setDraftStatus('draft');
+  }, [currentOptimizationSignature, draftStatus, optimization]);
 
   useEffect(() => {
     // Sempre iniciar com todos os supermercados fechados
@@ -402,6 +435,7 @@ export default function ListDetailScreen() {
       };
 
       setOptimization(normalized);
+      optimizationSigRef.current = optimizationSignature(draftItems, effectiveMaxStores);
       setDraftStatus('optimized');
       setExpandedStoreIds({});
       await upsertShoppingList({
@@ -484,200 +518,243 @@ export default function ListDetailScreen() {
 
   return (
     <Screen>
-      <View style={styles.headerRow}>
-        <Button variant="secondary" style={styles.headerIconBtn} onPress={() => void handleBack()}>
-          Voltar
-        </Button>
-        <View style={styles.headerCenter}>
-          <Text style={styles.title} numberOfLines={1}>
-            {listName || 'Lista'}
-          </Text>
-          <Text style={styles.subtitle}>
-            {checkedCount}/{draftItems.length} • {statusLabel(effectiveStatus)}
-            {hasOptimization ? ' • Otimizada' : ''}
-          </Text>
-        </View>
-        <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
-          Editar
-        </Button>
-      </View>
-
-      <Card style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Progresso</Text>
-          <Text style={styles.summaryValue}>{checkedCount}/{draftItems.length}</Text>
-        </View>
-        {hasOptimization ? (
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Total</Text>
-            <Text style={styles.summaryValue}>R$ {optimization!.total_cost.toFixed(2)}</Text>
-          </View>
-        ) : null}
-        {hasOptimization ? (
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Economia</Text>
-            <Text style={styles.summaryValue}>
-              R$ {optimization!.savings.toFixed(2)} ({optimization!.savings_percent.toFixed(1)}%)
-            </Text>
-          </View>
-        ) : null}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-      </Card>
-
       {hasOptimization ? (
-        <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>Supermercados</Text>
-          {optimization!.allocations.map((a) => {
-            const key = String(a.store_id);
-            const isOpen = Boolean(expandedStoreIds[key]);
-            return (
-              <View key={key} style={styles.storeBlock}>
-                <Pressable
-                  onPress={() => setExpandedStoreIds((prev) => ({ ...prev, [key]: !Boolean(prev[key]) }))}
-                  style={styles.storeHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.storeTitle} numberOfLines={1}>
-                      {a.store_name}
-                    </Text>
-                    {a.store_address ? <Text style={styles.storeSub} numberOfLines={1}>{a.store_address}</Text> : null}
-                  </View>
-                  <Text style={styles.storeTotal}>R$ {a.total.toFixed(2)}</Text>
-                </Pressable>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.headerRow}>
+            <Button variant="secondary" style={styles.headerIconBtn} onPress={() => void handleBack()}>
+              Voltar
+            </Button>
+            <View style={styles.headerCenter}>
+              <Text style={styles.title} numberOfLines={1}>
+                {listName || 'Lista'}
+              </Text>
+              <Text style={styles.subtitle}>
+                {checkedCount}/{draftItems.length} • {statusLabel(effectiveStatus)}
+                {hasOptimization ? ' • Otimizada' : ''}
+              </Text>
+            </View>
+            <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
+              Editar
+            </Button>
+          </View>
 
-                {isOpen ? (
-                  <View style={styles.storeItems}>
-                    {a.items.map((it) => {
-                      const local = draftItems.find((x) => x.canonical_id === it.canonical_id);
-                      const checked = Boolean(local?.is_checked);
-                      return (
-                        <View key={String(it.canonical_id)} style={styles.storeItemRow}>
-                          <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
-                            <View style={[styles.checkBox, checked ? styles.checkBoxChecked : null]}>
-                              {checked ? <View style={styles.checkDot} /> : null}
-                            </View>
-                          </Pressable>
-                          <View style={styles.storeItemInfo}>
-                            <Text style={[styles.itemName, checked ? styles.itemNameChecked : null]} numberOfLines={1}>
-                              {it.product_name}
-                            </Text>
-                            <Text style={styles.itemSub} numberOfLines={1}>
-                              Qtd: {it.quantity} • R$ {it.price.toFixed(2)} • Sub: R$ {it.subtotal.toFixed(2)}
-                            </Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                ) : null}
+          <Card style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Progresso</Text>
+              <Text style={styles.summaryValue}>{checkedCount}/{draftItems.length}</Text>
+            </View>
+            {hasOptimization ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Total</Text>
+                <Text style={styles.summaryValue}>R$ {optimization!.total_cost.toFixed(2)}</Text>
               </View>
-            );
-          })}
-
-          {(() => {
-            const allocations = optimization?.allocations ?? [];
-            const allocated = new Set<number>();
-            for (const a of allocations) for (const it of a.items) allocated.add(it.canonical_id);
-
-            const withoutRecent = new Set<number>((optimization?.items_without_price ?? []) as number[]);
-            const inferredOutside = draftItems
-              .map((it) => it.canonical_id)
-              .filter((id) => !allocated.has(id) && !withoutRecent.has(id));
-
-            const outside = (optimization?.items_outside_selected_stores?.length
-              ? optimization.items_outside_selected_stores
-              : inferredOutside) as number[];
-
-            if (!outside.length) return null;
-
-            const prices = optimization?.unoptimized_prices ?? [];
-            const byId = new Map<number, ShoppingListFallbackPriceItem>();
-            for (const p of prices) byId.set(p.canonical_id, p);
-
-            const items = draftItems
-              .filter((it) => outside.includes(it.canonical_id))
-              .map((it) => ({ it, price: byId.get(it.canonical_id) }));
-
-            if (!items.length) return null;
-
-            return (
-              <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
-                <Text style={styles.sectionTitle}>Itens fora dos supermercados selecionados</Text>
-                {items.map(({ it, price }) => (
-                  <View key={String(it.canonical_id)} style={styles.storeItemRow}>
-                    <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
-                      <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
-                        {it.is_checked ? <View style={styles.checkDot} /> : null}
-                      </View>
-                    </Pressable>
-                    <View style={styles.storeItemInfo}>
-                      <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
-                        {it.product_name}
-                      </Text>
-                      {price ? (
-                        <Text style={styles.itemSub} numberOfLines={1}>
-                          Qtd: {it.quantity} • R$ {price.price.toFixed(2)} ({price.store_name})
-                        </Text>
-                      ) : (
-                        <Text style={styles.itemSub} numberOfLines={1}>
-                          Qtd: {it.quantity} • sem preço nos supermercados selecionados
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                ))}
-                <Text style={styles.meta}>
-                  Dica: aumente a quantidade de supermercados na edição da lista para incluir esses itens na otimização.
+            ) : null}
+            {hasOptimization ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Economia</Text>
+                <Text style={styles.summaryValue}>
+                  R$ {optimization!.savings.toFixed(2)} ({optimization!.savings_percent.toFixed(1)}%)
                 </Text>
               </View>
-            );
-          })()}
+            ) : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          </Card>
 
-          {(() => {
-            const withoutRecent = optimization?.items_without_price ?? [];
-            if (!withoutRecent.length) return null;
-
-            const lookback = optimization?.price_lookback_days ?? 15;
-            const fallback = optimization?.fallback_prices ?? [];
-            const byId = new Map<number, ShoppingListFallbackPriceItem>();
-            for (const p of fallback) byId.set(p.canonical_id, p);
-
-            const items = draftItems
-              .filter((it) => withoutRecent.includes(it.canonical_id))
-              .map((it) => ({ it, fallback: byId.get(it.canonical_id) }));
-
-            if (!items.length) return null;
-
-            return (
-              <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
-                <Text style={styles.sectionTitle}>Itens sem preço recente (últimos {lookback} dias)</Text>
-                {items.map(({ it, fallback }) => (
-                  <View key={String(it.canonical_id)} style={styles.storeItemRow}>
-                    <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
-                      <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
-                        {it.is_checked ? <View style={styles.checkDot} /> : null}
-                      </View>
-                    </Pressable>
-                    <View style={styles.storeItemInfo}>
-                      <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
-                        {it.product_name}
+          <Card style={styles.card}>
+            <Text style={styles.sectionTitle}>Supermercados</Text>
+            {optimization!.allocations.map((a) => {
+              const key = String(a.store_id);
+              const isOpen = Boolean(expandedStoreIds[key]);
+              return (
+                <View key={key} style={styles.storeBlock}>
+                  <Pressable
+                    onPress={() => setExpandedStoreIds((prev) => ({ ...prev, [key]: !Boolean(prev[key]) }))}
+                    style={styles.storeHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.storeTitle} numberOfLines={1}>
+                        {a.store_name}
                       </Text>
-                      {fallback ? (
-                        <Text style={styles.itemSub} numberOfLines={1}>
-                          Qtd: {it.quantity} • R$ {fallback.price.toFixed(2)} ({fallback.store_name})
-                        </Text>
-                      ) : (
-                        <Text style={styles.itemSub} numberOfLines={1}>
-                          Qtd: {it.quantity} • sem preço
-                        </Text>
-                      )}
+                      {a.store_address ? <Text style={styles.storeSub} numberOfLines={1}>{a.store_address}</Text> : null}
                     </View>
-                  </View>
-                ))}
-              </View>
-            );
-          })()}
-        </Card>
+                    <Text style={styles.storeTotal}>R$ {a.total.toFixed(2)}</Text>
+                  </Pressable>
+
+                  {isOpen ? (
+                    <View style={styles.storeItems}>
+                      {a.items.map((it) => {
+                        const local = draftItems.find((x) => x.canonical_id === it.canonical_id);
+                        const checked = Boolean(local?.is_checked);
+                        return (
+                          <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                            <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                              <View style={[styles.checkBox, checked ? styles.checkBoxChecked : null]}>
+                                {checked ? <View style={styles.checkDot} /> : null}
+                              </View>
+                            </Pressable>
+                            <View style={styles.storeItemInfo}>
+                              <Text style={[styles.itemName, checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                                {it.product_name}
+                              </Text>
+                              <Text style={styles.itemSub} numberOfLines={1}>
+                                Qtd: {it.quantity} • R$ {it.price.toFixed(2)} • Sub: R$ {it.subtotal.toFixed(2)}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+
+            {(() => {
+              const allocations = optimization?.allocations ?? [];
+              const allocated = new Set<number>();
+              for (const a of allocations) for (const it of a.items) allocated.add(it.canonical_id);
+
+              const withoutRecent = new Set<number>((optimization?.items_without_price ?? []) as number[]);
+              const inferredOutside = draftItems
+                .map((it) => it.canonical_id)
+                .filter((id) => !allocated.has(id) && !withoutRecent.has(id));
+
+              const outside = (optimization?.items_outside_selected_stores?.length
+                ? optimization.items_outside_selected_stores
+                : inferredOutside) as number[];
+
+              if (!outside.length) return null;
+
+              const prices = optimization?.unoptimized_prices ?? [];
+              const byId = new Map<number, ShoppingListFallbackPriceItem>();
+              for (const p of prices) byId.set(p.canonical_id, p);
+
+              const items = draftItems
+                .filter((it) => outside.includes(it.canonical_id))
+                .map((it) => ({ it, price: byId.get(it.canonical_id) }));
+
+              if (!items.length) return null;
+
+              return (
+                <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
+                  <Text style={styles.sectionTitle}>Itens fora dos supermercados selecionados</Text>
+                  {items.map(({ it, price }) => (
+                    <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                      <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                        <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                          {it.is_checked ? <View style={styles.checkDot} /> : null}
+                        </View>
+                      </Pressable>
+                      <View style={styles.storeItemInfo}>
+                        <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                          {it.product_name}
+                        </Text>
+                        {price ? (
+                          <Text style={styles.itemSub} numberOfLines={1}>
+                            Qtd: {it.quantity} • R$ {price.price.toFixed(2)} ({price.store_name})
+                          </Text>
+                        ) : (
+                          <Text style={styles.itemSub} numberOfLines={1}>
+                            Qtd: {it.quantity} • sem preço nos supermercados selecionados
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                  <Text style={styles.meta}>
+                    Dica: aumente a quantidade de supermercados na edição da lista para incluir esses itens na otimização.
+                  </Text>
+                </View>
+              );
+            })()}
+
+            {(() => {
+              const withoutRecent = optimization?.items_without_price ?? [];
+              if (!withoutRecent.length) return null;
+
+              const lookback = optimization?.price_lookback_days ?? 15;
+              const fallback = optimization?.fallback_prices ?? [];
+              const byId = new Map<number, ShoppingListFallbackPriceItem>();
+              for (const p of fallback) byId.set(p.canonical_id, p);
+
+              const items = draftItems
+                .filter((it) => withoutRecent.includes(it.canonical_id))
+                .map((it) => ({ it, fallback: byId.get(it.canonical_id) }));
+
+              if (!items.length) return null;
+
+              return (
+                <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
+                  <Text style={styles.sectionTitle}>Itens sem preço recente (últimos {lookback} dias)</Text>
+                  {items.map(({ it, fallback }) => (
+                    <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                      <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                        <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                          {it.is_checked ? <View style={styles.checkDot} /> : null}
+                        </View>
+                      </Pressable>
+                      <View style={styles.storeItemInfo}>
+                        <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                          {it.product_name}
+                        </Text>
+                        {fallback ? (
+                          <Text style={styles.itemSub} numberOfLines={1}>
+                            Qtd: {it.quantity} • R$ {fallback.price.toFixed(2)} ({fallback.store_name})
+                          </Text>
+                        ) : (
+                          <Text style={styles.itemSub} numberOfLines={1}>
+                            Qtd: {it.quantity} • sem preço
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              );
+            })()}
+          </Card>
+        </ScrollView>
       ) : (
+        <>
+          <View style={styles.headerRow}>
+            <Button variant="secondary" style={styles.headerIconBtn} onPress={() => void handleBack()}>
+              Voltar
+            </Button>
+            <View style={styles.headerCenter}>
+              <Text style={styles.title} numberOfLines={1}>
+                {listName || 'Lista'}
+              </Text>
+              <Text style={styles.subtitle}>
+                {checkedCount}/{draftItems.length} • {statusLabel(effectiveStatus)}
+                {hasOptimization ? ' • Otimizada' : ''}
+              </Text>
+            </View>
+            <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
+              Editar
+            </Button>
+          </View>
+
+          <Card style={styles.summaryCard}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Progresso</Text>
+              <Text style={styles.summaryValue}>{checkedCount}/{draftItems.length}</Text>
+            </View>
+            {hasOptimization ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Total</Text>
+                <Text style={styles.summaryValue}>R$ {optimization!.total_cost.toFixed(2)}</Text>
+              </View>
+            ) : null}
+            {hasOptimization ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Economia</Text>
+                <Text style={styles.summaryValue}>
+                  R$ {optimization!.savings.toFixed(2)} ({optimization!.savings_percent.toFixed(1)}%)
+                </Text>
+              </View>
+            ) : null}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          </Card>
+
         <FlatList
           data={draftItems}
           keyExtractor={(it) => String(it.canonical_id)}
@@ -698,6 +775,7 @@ export default function ListDetailScreen() {
             </View>
           )}
         />
+        </>
       )}
 
       <View style={styles.bottomBar}>
@@ -918,326 +996,333 @@ export default function ListDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: theme.spacing.md,
-  },
-  title: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-    textTransform: 'uppercase',
-  },
-  headerIconBtn: {
-    height: 40,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  subtitle: {
-    marginTop: 2,
-    color: theme.colors.text.muted,
-    fontSize: 12,
-  },
-  summaryCard: {
-    marginTop: theme.spacing.sm,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: theme.spacing.sm,
-  },
-  summaryLabel: {
-    color: theme.colors.text.muted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  summaryValue: {
-    color: theme.colors.text.primary,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  card: {
-    marginTop: theme.spacing.sm,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: theme.colors.text.primary,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-end',
-  },
-  colQtyWide: {
-    width: 120,
-  },
-  primaryButton: {
-    flex: 1,
-    marginTop: theme.spacing.sm,
-  },
-  meta: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.text.muted,
-    fontSize: theme.font.size.xs,
-  },
-  errorText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.danger.text,
-    fontSize: theme.font.size.xs,
-  },
-  listContent: {
-    paddingTop: 12,
-    paddingBottom: 96,
-  },
-  emptyText: {
-    color: theme.colors.text.muted,
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    padding: 12,
-    marginBottom: 10,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  checkWrap: {
-    paddingRight: 10,
-    paddingVertical: 6,
-  },
-  checkBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: theme.colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.bg.surface,
-  },
-  checkBoxChecked: {
-    borderColor: theme.colors.text.primary,
-  },
-  checkDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 4,
-    backgroundColor: theme.colors.text.primary,
-  },
-  itemInfo: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  itemName: {
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-  },
-  itemNameChecked: {
-    color: theme.colors.text.muted,
-    textDecorationLine: 'line-through',
-  },
-  itemSub: {
-    marginTop: 4,
-    color: theme.colors.text.muted,
-    fontSize: 12,
-  },
-  removeButton: {
-    height: 36,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.danger.soft,
-  },
-  removeButtonText: {
-    color: theme.colors.danger.text,
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  suggestionsBox: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    overflow: 'hidden',
-    backgroundColor: theme.colors.bg.surface,
-  },
-  suggestionRow: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border.subtle,
-  },
-  suggestionRowSelected: {
-    backgroundColor: theme.colors.bg.surfaceAlt,
-  },
-  suggestionTitle: {
-    fontWeight: '700',
-  },
-  suggestionSub: {
-    marginTop: 3,
-    color: theme.colors.text.muted,
-    fontSize: 12,
-  },
-  statusRow: {
-    marginTop: theme.spacing.sm,
-  },
-  statusLabel: {
-    marginBottom: 6,
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text.muted,
-  },
-  statusPills: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  statusPill: {
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  statusPillActive: {
-    borderColor: theme.colors.text.primary,
-  },
-  statusPillText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text.muted,
-  },
-  statusPillTextActive: {
-    color: theme.colors.text.primary,
-  },
-  statusAuto: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  statusAutoText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-  },
-  storeItemRow: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  storeItemInfo: {
-    flex: 1,
-  },
-  storeBlock: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    overflow: 'hidden',
-    backgroundColor: theme.colors.bg.surface,
-  },
-  storeHeader: {
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: theme.colors.bg.surfaceAlt,
-  },
-  storeTitle: {
-    fontWeight: '800',
-    color: theme.colors.text.primary,
-  },
-  storeSub: {
-    marginTop: 2,
-    fontSize: 12,
-    color: theme.colors.text.muted,
-  },
-  storeTotal: {
-    fontWeight: '800',
-    color: theme.colors.text.primary,
-  },
-  storeItems: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  bottomBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: theme.spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surface,
-  },
-  bottomBtn: {
-    height: 48,
-  },
-  editItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.55)',
-    padding: theme.spacing.lg,
-    justifyContent: 'center',
-  },
-  modalCard: {
-    backgroundColor: theme.colors.bg.surface,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.lg,
-  },
-  modalTitle: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  modalSub: {
-    marginTop: 6,
-    marginBottom: theme.spacing.md,
-    fontSize: theme.font.size.sm,
-    color: theme.colors.text.muted,
-  },
-  modalActions: {
-    marginTop: theme.spacing.md,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalBtn: {
-    flex: 1,
-    height: 42,
-  },
-  cameraBox: {
-    marginTop: theme.spacing.md,
-    width: '100%',
-    height: 320,
-    borderRadius: theme.radius.md,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.surfaceAlt,
-  },
-});
+const makeStyles = (theme: AppTheme) =>
+  StyleSheet.create({
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: theme.spacing.md,
+    },
+    title: {
+      fontSize: theme.font.size.lg,
+      fontWeight: theme.font.weight.bold,
+      color: theme.colors.text.primary,
+      textTransform: 'uppercase',
+    },
+    headerIconBtn: {
+      height: 40,
+    },
+    headerCenter: {
+      flex: 1,
+    },
+    subtitle: {
+      marginTop: 2,
+      color: theme.colors.text.muted,
+      fontSize: 12,
+    },
+    summaryCard: {
+      marginTop: theme.spacing.sm,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: theme.spacing.sm,
+    },
+    summaryLabel: {
+      color: theme.colors.text.muted,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    summaryValue: {
+      color: theme.colors.text.primary,
+      fontSize: 12,
+      fontWeight: '800',
+    },
+    card: {
+      marginTop: theme.spacing.sm,
+    },
+    sectionTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.text.primary,
+    },
+    row: {
+      flexDirection: 'row',
+      gap: 10,
+      alignItems: 'flex-end',
+    },
+    colQtyWide: {
+      width: 120,
+    },
+    primaryButton: {
+      flex: 1,
+      marginTop: theme.spacing.sm,
+    },
+    meta: {
+      marginTop: theme.spacing.sm,
+      color: theme.colors.text.muted,
+      fontSize: theme.font.size.xs,
+    },
+    errorText: {
+      marginTop: theme.spacing.sm,
+      color: theme.colors.danger.text,
+      fontSize: theme.font.size.xs,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingBottom: 96,
+    },
+    listContent: {
+      paddingTop: 12,
+      paddingBottom: 96,
+    },
+    emptyText: {
+      color: theme.colors.text.muted,
+      marginTop: theme.spacing.md,
+      textAlign: 'center',
+    },
+    itemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      borderRadius: theme.radius.md,
+      padding: 12,
+      marginBottom: 10,
+      backgroundColor: theme.colors.bg.surface,
+    },
+    checkWrap: {
+      paddingRight: 10,
+      paddingVertical: 6,
+    },
+    checkBox: {
+      width: 22,
+      height: 22,
+      borderRadius: 8,
+      borderWidth: 2,
+      borderColor: theme.colors.border.subtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.bg.surface,
+    },
+    checkBoxChecked: {
+      borderColor: theme.colors.text.primary,
+    },
+    checkDot: {
+      width: 10,
+      height: 10,
+      borderRadius: 4,
+      backgroundColor: theme.colors.text.primary,
+    },
+    itemInfo: {
+      flex: 1,
+      paddingRight: 12,
+    },
+    itemName: {
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+    },
+    itemNameChecked: {
+      color: theme.colors.text.muted,
+      textDecorationLine: 'line-through',
+    },
+    itemSub: {
+      marginTop: 4,
+      color: theme.colors.text.muted,
+      fontSize: 12,
+    },
+    removeButton: {
+      height: 36,
+      paddingHorizontal: 12,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.danger.soft,
+    },
+    removeButtonText: {
+      color: theme.colors.danger.text,
+      fontWeight: '700',
+      fontSize: 12,
+    },
+    suggestionsBox: {
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      borderRadius: theme.radius.md,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.bg.surface,
+    },
+    suggestionRow: {
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border.subtle,
+    },
+    suggestionRowSelected: {
+      backgroundColor: theme.colors.bg.surfaceAlt,
+    },
+    suggestionTitle: {
+      fontWeight: '700',
+    },
+    suggestionSub: {
+      marginTop: 3,
+      color: theme.colors.text.muted,
+      fontSize: 12,
+    },
+    statusRow: {
+      marginTop: theme.spacing.sm,
+    },
+    statusLabel: {
+      marginBottom: 6,
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text.muted,
+    },
+    statusPills: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
+    statusPill: {
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      backgroundColor: theme.colors.bg.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    statusPillActive: {
+      borderColor: theme.colors.text.primary,
+    },
+    statusPillText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text.muted,
+    },
+    statusPillTextActive: {
+      color: theme.colors.text.primary,
+    },
+    statusAuto: {
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    statusAutoText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text.primary,
+    },
+    storeItemRow: {
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    storeItemInfo: {
+      flex: 1,
+    },
+    storeBlock: {
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      borderRadius: theme.radius.md,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.bg.surface,
+    },
+    storeHeader: {
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.colors.bg.surfaceAlt,
+    },
+    storeTitle: {
+      fontWeight: '800',
+      color: theme.colors.text.primary,
+    },
+    storeSub: {
+      marginTop: 2,
+      fontSize: 12,
+      color: theme.colors.text.muted,
+    },
+    storeTotal: {
+      fontWeight: '800',
+      color: theme.colors.text.primary,
+    },
+    storeItems: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    bottomBar: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      padding: theme.spacing.md,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border.subtle,
+      backgroundColor: theme.colors.bg.surface,
+    },
+    bottomBtn: {
+      height: 48,
+    },
+    editItemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border.subtle,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(2, 6, 23, 0.55)',
+      padding: theme.spacing.lg,
+      justifyContent: 'center',
+    },
+    modalCard: {
+      backgroundColor: theme.colors.bg.surface,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      padding: theme.spacing.lg,
+    },
+    modalTitle: {
+      fontSize: theme.font.size.lg,
+      fontWeight: theme.font.weight.bold,
+      color: theme.colors.text.primary,
+    },
+    modalSub: {
+      marginTop: 6,
+      marginBottom: theme.spacing.md,
+      fontSize: theme.font.size.sm,
+      color: theme.colors.text.muted,
+    },
+    modalActions: {
+      marginTop: theme.spacing.md,
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalBtn: {
+      flex: 1,
+      height: 42,
+    },
+    cameraBox: {
+      marginTop: theme.spacing.md,
+      width: '100%',
+      height: 320,
+      borderRadius: theme.radius.md,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      backgroundColor: theme.colors.bg.surfaceAlt,
+    },
+  });

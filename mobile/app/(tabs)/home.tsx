@@ -1,13 +1,42 @@
+import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { Text } from '@/components/Themed';
 import { Card } from '@/components/ui/Card';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/lib/auth';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const theme = useTheme();
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        title: {
+          fontSize: theme.font.size.lg,
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        subtitle: {
+          marginTop: theme.spacing.xs,
+          color: theme.colors.text.secondary,
+        },
+        card: {
+          marginTop: theme.spacing.md,
+        },
+        cardTitle: {
+          fontWeight: theme.font.weight.bold,
+          color: theme.colors.text.primary,
+        },
+        cardText: {
+          marginTop: theme.spacing.xs,
+          color: theme.colors.text.muted,
+        },
+      }),
+    [theme]
+  );
 
   return (
     <Screen>
@@ -31,26 +60,3 @@ export default function HomeScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  title: {
-    fontSize: theme.font.size.lg,
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  subtitle: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.text.secondary,
-  },
-  card: {
-    marginTop: theme.spacing.md,
-  },
-  cardTitle: {
-    fontWeight: theme.font.weight.bold,
-    color: theme.colors.text.primary,
-  },
-  cardText: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.text.muted,
-  },
-});

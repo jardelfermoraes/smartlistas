@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import { Text } from '@/components/Themed';
@@ -8,14 +8,65 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/lib/auth';
-import { theme } from '@/lib/theme';
+import { useTheme } from '@/lib/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const { isLoading, isAuthenticated, signInWithEmail } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const styles = useMemo(
+    () =>
+      StyleSheet.create({
+        container: {
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        card: {
+          width: '100%',
+          maxWidth: 420,
+          padding: theme.spacing.xl,
+        },
+        brand: {
+          fontSize: theme.font.size.xl,
+          fontWeight: theme.font.weight.extrabold,
+          color: theme.colors.brand.primary,
+        },
+        subtitle: {
+          marginTop: theme.spacing.xs,
+          marginBottom: theme.spacing.md,
+          color: theme.colors.text.secondary,
+        },
+        errorText: {
+          marginTop: theme.spacing.sm,
+          color: theme.colors.danger.text,
+          fontSize: theme.font.size.xs,
+        },
+        footer: {
+          marginTop: theme.spacing.md,
+          textAlign: 'center',
+          color: theme.colors.text.muted,
+          fontSize: theme.font.size.xs,
+        },
+        linkWrap: {
+          marginTop: theme.spacing.sm,
+          paddingVertical: theme.spacing.xs,
+          alignItems: 'center',
+        },
+        linkPressed: {
+          opacity: 0.8,
+        },
+        linkText: {
+          color: theme.colors.text.secondary,
+          fontSize: theme.font.size.sm,
+          fontWeight: theme.font.weight.semibold,
+        },
+      }),
+    [theme]
+  );
 
   useEffect(() => {
     if (isLoading) return;
@@ -75,48 +126,3 @@ export default function LoginScreen() {
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    padding: theme.spacing.lg,
-  },
-  brand: {
-    fontSize: theme.font.size.xl,
-    fontWeight: theme.font.weight.extrabold,
-    color: theme.colors.brand.primary,
-  },
-  subtitle: {
-    marginTop: theme.spacing.xs,
-    marginBottom: theme.spacing.sm,
-    color: theme.colors.text.secondary,
-  },
-  errorText: {
-    marginTop: theme.spacing.sm,
-    color: theme.colors.danger.text,
-    fontSize: theme.font.size.xs,
-  },
-  footer: {
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-    color: theme.colors.text.muted,
-    fontSize: theme.font.size.xs,
-  },
-  linkWrap: {
-    marginTop: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    alignItems: 'center',
-  },
-  linkPressed: {
-    opacity: 0.8,
-  },
-  linkText: {
-    color: theme.colors.text.secondary,
-    fontSize: theme.font.size.sm,
-  },
-});
