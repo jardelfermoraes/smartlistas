@@ -36,6 +36,16 @@ type CanonicalListResponse = {
   pages: number;
 };
 
+function formatCurrencyBRL(value: number): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '--';
+  try {
+    return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } catch {
+    return n.toFixed(2);
+  }
+}
+
 function optimizationSignature(items: ShoppingListDraft['items'], maxStores: number): string {
   const pairs = (items ?? [])
     .map((it) => ({ id: Number(it.canonical_id), q: Number(it.quantity) }))
@@ -111,6 +121,31 @@ type AppOptimizationResult = {
   price_lookback_days?: number;
 };
 
+function storeTone(
+  theme: AppTheme,
+  idx: number
+): { bg: string; headerBg: string; border: string; accent: string; itemBg: string; itemBorder: string } {
+  const palette = [
+    { accent: '#2563eb', bg: 'rgba(37, 99, 235, 0.10)', headerBg: 'rgba(37, 99, 235, 0.16)', border: 'rgba(37, 99, 235, 0.30)' },
+    { accent: '#7c3aed', bg: 'rgba(124, 58, 237, 0.10)', headerBg: 'rgba(124, 58, 237, 0.16)', border: 'rgba(124, 58, 237, 0.30)' },
+    { accent: '#059669', bg: 'rgba(5, 150, 105, 0.10)', headerBg: 'rgba(5, 150, 105, 0.16)', border: 'rgba(5, 150, 105, 0.30)' },
+    { accent: '#d97706', bg: 'rgba(217, 119, 6, 0.10)', headerBg: 'rgba(217, 119, 6, 0.16)', border: 'rgba(217, 119, 6, 0.30)' },
+  ];
+
+  const p = palette[Math.abs(idx) % palette.length];
+  const itemBg = theme.name === 'dark' ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.65)';
+  const itemBorder = theme.name === 'dark' ? 'rgba(255,255,255,0.10)' : 'rgba(15, 23, 42, 0.06)';
+
+  return {
+    bg: theme.name === 'dark' ? p.bg : p.bg,
+    headerBg: theme.name === 'dark' ? p.headerBg : p.headerBg,
+    border: p.border,
+    accent: p.accent,
+    itemBg,
+    itemBorder,
+  };
+}
+
 function statusLabel(status: ShoppingListStatus): string {
   switch (status) {
     case 'draft':
@@ -181,6 +216,74 @@ export default function ListDetailScreen() {
 
   const checkedCount = useMemo(() => draftItems.filter((it) => Boolean(it.is_checked)).length, [draftItems]);
   const hasOptimization = Boolean(optimization?.allocations?.length);
+
+  const optimizationSets = useMemo(() => {
+    const allocations = optimization?.allocations ?? [];
+    const allocated = new Set<number>();
+    for (const a of allocations) for (const it of a.items) allocated.add(it.canonical_id);
+
+    const withoutRecent = new Set<number>((optimization?.items_without_price ?? []) as number[]);
+
+    const inferredOutside = draftItems
+      .map((it) => it.canonical_id)
+      .filter((cid) => !allocated.has(cid) && !withoutRecent.has(cid));
+
+    const outside = (optimization?.items_outside_selected_stores?.length
+      ? optimization.items_outside_selected_stores
+      : inferredOutside) as number[];
+
+    return {
+      allocated,
+      withoutRecent,
+      outside: new Set<number>(outside.map((x) => Number(x)).filter((x) => Number.isFinite(x))),
+    };
+  }, [draftItems, optimization?.allocations, optimization?.items_outside_selected_stores, optimization?.items_without_price]);
+
+  const kpis = useMemo(() => {
+    if (!optimization?.allocations?.length) {
+      return {
+        optimizedTotal: 0,
+        baselineTotal: 0,
+        savings: 0,
+        savingsPercent: 0,
+        excludedNoPriceCount: 0,
+        excludedOutsideCount: 0,
+      };
+    }
+
+    const optimizedTotal = optimization.allocations.reduce((acc, a) => acc + (Number.isFinite(a.total) ? a.total : 0), 0);
+
+    // Base do backend: savings foi calculado com base em itens com preço recente.
+    // Para o mini-dashboard, removemos do baseline os itens fora da otimização (fora dos supermercados selecionados).
+    const baselineRaw = optimizedTotal + (Number.isFinite(optimization.savings) ? optimization.savings : 0);
+
+    const outsideIds = optimizationSets.outside;
+    const byId = new Map<number, ShoppingListFallbackPriceItem>();
+    for (const p of optimization.unoptimized_prices ?? []) {
+      if (Number.isFinite(p.canonical_id)) byId.set(p.canonical_id, p);
+    }
+    let outsideCost = 0;
+    for (const it of draftItems) {
+      if (!outsideIds.has(it.canonical_id)) continue;
+      const price = byId.get(it.canonical_id);
+      if (!price) continue;
+      const q = Number.isFinite(it.quantity) ? it.quantity : 0;
+      outsideCost += (Number.isFinite(price.price) ? price.price : 0) * q;
+    }
+
+    const baselineTotal = Math.max(0, baselineRaw - outsideCost);
+    const savings = Math.max(0, baselineTotal - optimizedTotal);
+    const savingsPercent = baselineTotal > 0 ? (savings / baselineTotal) * 100 : 0;
+
+    return {
+      optimizedTotal,
+      baselineTotal,
+      savings,
+      savingsPercent,
+      excludedNoPriceCount: optimizationSets.withoutRecent.size,
+      excludedOutsideCount: optimizationSets.outside.size,
+    };
+  }, [draftItems, optimization?.allocations, optimization?.savings, optimization?.unoptimized_prices, optimizationSets.outside, optimizationSets.withoutRecent.size]);
   const currentOptimizationSignature = useMemo(
     () => optimizationSignature(draftItems, maxStores),
     [draftItems, maxStores]
@@ -543,40 +646,54 @@ export default function ListDetailScreen() {
               <Text style={styles.summaryLabel}>Progresso</Text>
               <Text style={styles.summaryValue}>{checkedCount}/{draftItems.length}</Text>
             </View>
-            {hasOptimization ? (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total</Text>
-                <Text style={styles.summaryValue}>R$ {optimization!.total_cost.toFixed(2)}</Text>
+
+            <View style={styles.kpiGrid}>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiLabel}>Valor máximo</Text>
+                <Text style={styles.kpiValue}>R$ {formatCurrencyBRL(kpis.baselineTotal)}</Text>
               </View>
-            ) : null}
-            {hasOptimization ? (
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Economia</Text>
-                <Text style={styles.summaryValue}>
-                  R$ {optimization!.savings.toFixed(2)} ({optimization!.savings_percent.toFixed(1)}%)
-                </Text>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiLabel}>Valor otimizado</Text>
+                <Text style={styles.kpiValue}>R$ {formatCurrencyBRL(kpis.optimizedTotal)}</Text>
               </View>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiLabel}>Economia proj.</Text>
+                <Text style={styles.kpiValue}>R$ {formatCurrencyBRL(kpis.savings)}</Text>
+              </View>
+              <View style={styles.kpiTile}>
+                <Text style={styles.kpiLabel}>Economia (%)</Text>
+                <Text style={styles.kpiValue}>{kpis.savingsPercent.toFixed(1)}%</Text>
+              </View>
+            </View>
+
+            {hasOptimization ? (
+              <Text style={styles.kpiHint}>
+                Cálculos consideram apenas itens com preço recente e dentro da otimização.
+                {kpis.excludedNoPriceCount > 0 ? ` ${kpis.excludedNoPriceCount} item(ns) sem preço foram ignorados.` : ''}
+                {kpis.excludedOutsideCount > 0 ? ` ${kpis.excludedOutsideCount} item(ns) fora da otimização foram ignorados.` : ''}
+              </Text>
             ) : null}
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
           </Card>
 
           <Card style={styles.card}>
             <Text style={styles.sectionTitle}>Supermercados</Text>
-            {optimization!.allocations.map((a) => {
+            {optimization!.allocations.map((a, idx) => {
               const key = String(a.store_id);
               const isOpen = Boolean(expandedStoreIds[key]);
+              const tone = storeTone(theme, idx);
               return (
-                <View key={key} style={styles.storeBlock}>
+                <View key={key} style={[styles.storeBlock, { borderColor: tone.border, backgroundColor: tone.bg }]}>
                   <Pressable
                     onPress={() => setExpandedStoreIds((prev) => ({ ...prev, [key]: !Boolean(prev[key]) }))}
-                    style={styles.storeHeader}>
+                    style={[styles.storeHeader, { backgroundColor: tone.headerBg }]}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.storeTitle} numberOfLines={1}>
                         {a.store_name}
                       </Text>
                       {a.store_address ? <Text style={styles.storeSub} numberOfLines={1}>{a.store_address}</Text> : null}
                     </View>
-                    <Text style={styles.storeTotal}>R$ {a.total.toFixed(2)}</Text>
+                    <Text style={[styles.storeTotal, { color: tone.accent }]}>R$ {a.total.toFixed(2)}</Text>
                   </Pressable>
 
                   {isOpen ? (
@@ -585,7 +702,9 @@ export default function ListDetailScreen() {
                         const local = draftItems.find((x) => x.canonical_id === it.canonical_id);
                         const checked = Boolean(local?.is_checked);
                         return (
-                          <View key={String(it.canonical_id)} style={styles.storeItemRow}>
+                          <View
+                            key={String(it.canonical_id)}
+                            style={[styles.storeItemRow, { borderColor: tone.itemBorder, backgroundColor: tone.itemBg }]}>
                             <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
                               <View style={[styles.checkBox, checked ? styles.checkBoxChecked : null]}>
                                 {checked ? <View style={styles.checkDot} /> : null}
@@ -1041,6 +1160,40 @@ const makeStyles = (theme: AppTheme) =>
       fontSize: 12,
       fontWeight: '800',
     },
+    kpiGrid: {
+      marginTop: theme.spacing.md,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+      backgroundColor: 'transparent',
+    },
+    kpiTile: {
+      flexGrow: 1,
+      flexBasis: '48%',
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      backgroundColor: theme.colors.bg.surface,
+    },
+    kpiLabel: {
+      color: theme.colors.text.muted,
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    kpiValue: {
+      marginTop: 6,
+      color: theme.colors.text.primary,
+      fontSize: 14,
+      fontWeight: '900',
+    },
+    kpiHint: {
+      marginTop: theme.spacing.sm,
+      color: theme.colors.text.muted,
+      fontSize: theme.font.size.xs,
+      lineHeight: 18,
+    },
     card: {
       marginTop: theme.spacing.sm,
     },
@@ -1223,6 +1376,10 @@ const makeStyles = (theme: AppTheme) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
+      borderWidth: 1,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
     },
     storeItemInfo: {
       flex: 1,
