@@ -160,6 +160,15 @@ class AppUserUpdate(BaseModel):
     notification_price_drop: Optional[bool] = None
 
 
+class AppPushTokenIn(BaseModel):
+    expo_push_token: str = Field(..., min_length=10, max_length=500)
+    provider: str = Field(default="expo", max_length=30)
+
+
+class AppPushTokenOut(BaseModel):
+    ok: bool
+
+
 class TokenResponse(BaseModel):
     """Schema de resposta com tokens."""
     access_token: str
@@ -489,6 +498,34 @@ def logout(
     db.commit()
     
     return {"message": "Logout realizado com sucesso"}
+
+
+@router.post("/me/push-token", response_model=AppPushTokenOut)
+def update_push_token(
+    data: AppPushTokenIn,
+    db: Session = Depends(get_db),
+    current_user: AppUser = Depends(get_current_app_user),
+):
+    token = (data.expo_push_token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Token inválido")
+
+    # Atualiza o token nas sessões ativas do usuário (o /admin/notifications usa AppUserSession.push_token)
+    updated = (
+        db.query(AppUserSession)
+        .filter(AppUserSession.user_id == current_user.id, AppUserSession.is_active == True)
+        .update({"push_token": token}, synchronize_session=False)
+    )
+    if updated:
+        db.commit()
+    else:
+        # se não houver sessão ativa, ainda assim não falhar (o app pode estar em edge case)
+        try:
+            db.commit()
+        except Exception:
+            pass
+
+    return AppPushTokenOut(ok=True)
 
 
 @router.post("/referrals/open")

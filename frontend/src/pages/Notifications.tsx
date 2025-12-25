@@ -94,6 +94,8 @@ export function NotificationsPage() {
     mutationFn: (payload: SendNotificationPayload) => notificationsAdminApi.send(payload).then((r) => r.data),
   });
 
+  const canSend = Boolean(sendForm.title.trim() && !sendMutation.isPending && (audience?.token_count ?? 0) > 0);
+
   const rulesQuery = useQuery({
     queryKey: ['notification-rules'],
     enabled: tab === 'rules',
@@ -318,6 +320,12 @@ export function NotificationsPage() {
                 </span>
               )}
             </div>
+
+            {!isAudienceLoading && (audience?.token_count ?? 0) === 0 ? (
+              <div className="text-sm text-amber-700">
+                Nenhum aparelho registrou token de push ainda. Abra o app no celular, permita notificações e faça login para registrar o token.
+              </div>
+            ) : null}
           </div>
 
           <div className="card space-y-4">
@@ -346,7 +354,7 @@ export function NotificationsPage() {
             <div className="flex items-center justify-end gap-3">
               <button
                 className="btn-primary flex items-center gap-2"
-                disabled={sendMutation.isPending || !sendForm.title.trim()}
+                disabled={!canSend}
                 onClick={() => {
                   const payload: SendNotificationPayload = {
                     title: sendForm.title.trim(),
