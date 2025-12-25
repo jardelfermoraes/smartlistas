@@ -251,6 +251,7 @@ export default function ListDetailScreen() {
         savingsPercent: 0,
         excludedNoPriceCount: 0,
         excludedOutsideCount: 0,
+        hasWorstData: false,
       };
     }
 
@@ -259,14 +260,23 @@ export default function ListDetailScreen() {
     // Valor máximo deve ser o pior custo possível considerando apenas itens otimizados.
     // Quando o backend enviar total_worst_cost/potential_savings, usamos diretamente.
     const worstFromBackend = Number((optimization as any).total_worst_cost);
-    const baselineTotal = Number.isFinite(worstFromBackend) && worstFromBackend > 0 ? worstFromBackend : 0;
+    const hasWorstData = Number.isFinite(worstFromBackend) && worstFromBackend > 0;
+    const fallbackBaseline = optimizedTotal + (Number.isFinite(optimization.savings) ? Math.max(0, optimization.savings) : 0);
+    const baselineTotal = hasWorstData ? worstFromBackend : fallbackBaseline;
 
     const potentialFromBackend = Number((optimization as any).potential_savings);
-    const savings = Number.isFinite(potentialFromBackend) && potentialFromBackend >= 0 ? potentialFromBackend : Math.max(0, baselineTotal - optimizedTotal);
+    const savings =
+      hasWorstData && Number.isFinite(potentialFromBackend) && potentialFromBackend >= 0
+        ? potentialFromBackend
+        : Math.max(0, baselineTotal - optimizedTotal);
 
     const pctFromBackend = Number((optimization as any).potential_savings_percent);
     const savingsPercent =
-      Number.isFinite(pctFromBackend) && pctFromBackend >= 0 ? pctFromBackend : baselineTotal > 0 ? (savings / baselineTotal) * 100 : 0;
+      hasWorstData && Number.isFinite(pctFromBackend) && pctFromBackend >= 0
+        ? pctFromBackend
+        : baselineTotal > 0
+          ? (savings / baselineTotal) * 100
+          : 0;
 
     return {
       optimizedTotal,
@@ -275,6 +285,7 @@ export default function ListDetailScreen() {
       savingsPercent,
       excludedNoPriceCount: optimizationSets.withoutRecent.size,
       excludedOutsideCount: optimizationSets.outside.size,
+      hasWorstData,
     };
   }, [draftItems, optimization?.allocations, optimization?.savings, optimization?.unoptimized_prices, optimizationSets.outside, optimizationSets.withoutRecent.size]);
   const currentOptimizationSignature = useMemo(
@@ -662,7 +673,9 @@ export default function ListDetailScreen() {
 
             {hasOptimization ? (
               <Text style={styles.kpiHint}>
-                Cálculos consideram apenas itens com preço recente e dentro da otimização.
+                {kpis.hasWorstData
+                  ? 'Cálculos consideram apenas itens com preço recente e dentro da otimização.'
+                  : 'Economia projetada (pior caso) ainda não disponível para esta lista. Toque em Editar e otimize novamente para recalcular.'}
                 {kpis.excludedNoPriceCount > 0 ? ` ${kpis.excludedNoPriceCount} item(ns) sem preço foram ignorados.` : ''}
                 {kpis.excludedOutsideCount > 0 ? ` ${kpis.excludedOutsideCount} item(ns) fora da otimização foram ignorados.` : ''}
               </Text>
