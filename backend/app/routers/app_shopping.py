@@ -7,10 +7,11 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import AppShoppingList, AppShoppingListItem, AppUser, CanonicalProduct, Store
+from ..models import AppShoppingList, AppShoppingListItem, AppUser, CanonicalProduct, Price, Store
 from .app_auth import get_current_app_user
 from ..services.app_shopping_optimizer import AppShoppingOptimizer
 from ..services.city_location import resolve_city_centroid
@@ -390,15 +391,39 @@ def optimize_local_payload(
     savings = float(max(0.0, total_if_single_store - total_cost))
     savings_percent = float((savings / total_if_single_store * 100) if total_if_single_store > 0 and savings > 0 else 0.0)
 
-    # KPI "Valor máximo": pior custo possível considerando os itens realmente alocados (otimizados).
-    # Isso ignora itens sem preço recente e itens fora da otimização.
-    allocated_item_ids = {ip.item_id for alloc in allocations for ip in alloc.items}
+    # KPI "Valor máximo": soma do MAIOR preço encontrado por item otimizado.
+    # - Considera apenas itens que entraram na otimização (alocados)
+    # - Para o "máximo", consideramos o preço MAIS RECENTE disponível por loja (mesmo antigo),
+    #   e então pegamos o MAIOR entre as lojas elegíveis.
+    allocated_canonical_ids = {ip.canonical_id for alloc in allocations for ip in alloc.items}
+    qty_by_canonical = {it.canonical_id: float(it.quantity) for it in temp.items}
     total_worst_cost = 0.0
-    for item_id in allocated_item_ids:
-        candidates = [ip.subtotal for ip in item_prices if ip.item_id == item_id]
-        if not candidates:
-            continue
-        total_worst_cost += float(max(candidates))
+    if allocated_canonical_ids:
+        # Para o "máximo", usamos o MAIOR preço histórico encontrado (não só o mais recente),
+        # dentro das lojas elegíveis.
+        rows = (
+            db.query(
+                Price.canonical_id,
+                func.max(Price.preco_por_unidade).label("max_unit"),
+            )
+            .filter(
+                Price.canonical_id.in_(list(allocated_canonical_ids)),
+                Price.loja_id.in_(eligible_store_ids),
+                Price.preco_por_unidade.isnot(None),
+                Price.preco_por_unidade > 0,
+            )
+            .group_by(Price.canonical_id)
+            .all()
+        )
+
+        worst_unit_by_canonical: dict[int, float] = {int(cid): float(unit) for cid, unit in rows if unit is not None}
+
+        for cid in allocated_canonical_ids:
+            worst_unit = worst_unit_by_canonical.get(cid)
+            qty = qty_by_canonical.get(cid)
+            if worst_unit is None or qty is None:
+                continue
+            total_worst_cost += float(worst_unit) * float(qty)
 
     potential_savings = float(max(0.0, total_worst_cost - total_cost))
     potential_savings_percent = float(
