@@ -27,6 +27,26 @@ const LAST_NOTIFICATION_DEBUG_KEY = 'smartlistas.notifications.last_debug.v1';
 const LAST_INBOX_WRITE_DEBUG_KEY = 'smartlistas.inbox.last_write_debug.v1';
 const LAST_INBOX_WRITE_ERROR_KEY = 'smartlistas.inbox.last_write_error.v1';
 
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function safeEncodeURIComponent(value: string): string {
+  try {
+    return encodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeIdForCompare(value: string): string {
+  return safeEncodeURIComponent(value.trim());
+}
+
 function normalizeInboxMessage(raw: unknown): InboxMessage | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as any;
@@ -68,15 +88,43 @@ export async function loadInbox(): Promise<InboxMessage[]> {
   return await readInboxRaw();
 }
 
-export async function getInboxMessageById(id: string): Promise<InboxMessage | null> {
+async function resolveInboxMessageId(id: string): Promise<string | null> {
   const safeId = id.trim();
   if (!safeId) return null;
+
   const items = await readInboxRaw();
-  return items.find((m) => m.id === safeId) ?? null;
+  const targets = new Set<string>();
+  targets.add(safeId);
+  targets.add(safeDecodeURIComponent(safeId));
+  targets.add(safeEncodeURIComponent(safeId));
+  targets.add(normalizeIdForCompare(safeId));
+  targets.add(normalizeIdForCompare(safeDecodeURIComponent(safeId)));
+
+  for (const m of items) {
+    const itemCandidates = [
+      m.id,
+      safeDecodeURIComponent(m.id),
+      safeEncodeURIComponent(m.id),
+      normalizeIdForCompare(m.id),
+      normalizeIdForCompare(safeDecodeURIComponent(m.id)),
+    ];
+    if (itemCandidates.some((c) => targets.has(c))) {
+      return m.id;
+    }
+  }
+
+  return null;
+}
+
+export async function getInboxMessageById(id: string): Promise<InboxMessage | null> {
+  const canonicalId = await resolveInboxMessageId(id);
+  if (!canonicalId) return null;
+  const items = await readInboxRaw();
+  return items.find((m) => m.id === canonicalId) ?? null;
 }
 
 export async function markInboxMessageRead(id: string): Promise<void> {
-  const safeId = id.trim();
+  const safeId = await resolveInboxMessageId(id);
   if (!safeId) return;
   const items = await readInboxRaw();
   const next = items.map((m) => {
@@ -88,7 +136,7 @@ export async function markInboxMessageRead(id: string): Promise<void> {
 }
 
 export async function markInboxMessageUnread(id: string): Promise<void> {
-  const safeId = id.trim();
+  const safeId = await resolveInboxMessageId(id);
   if (!safeId) return;
   const items = await readInboxRaw();
   const next = items.map((m) => {
@@ -107,7 +155,7 @@ export async function markAllInboxMessagesRead(): Promise<void> {
 }
 
 export async function deleteInboxMessage(id: string): Promise<void> {
-  const safeId = id.trim();
+  const safeId = await resolveInboxMessageId(id);
   if (!safeId) return;
   const items = await readInboxRaw();
   const next = items.filter((m) => m.id !== safeId);
