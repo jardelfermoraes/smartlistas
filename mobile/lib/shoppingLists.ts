@@ -37,6 +37,9 @@ export type ShoppingListOptimizationResult = {
   total_cost: number;
   savings: number;
   savings_percent: number;
+  total_worst_cost?: number;
+  potential_savings?: number;
+  potential_savings_percent?: number;
   items_without_price?: number[];
   items_outside_selected_stores?: number[];
   unoptimized_prices?: ShoppingListFallbackPriceItem[];

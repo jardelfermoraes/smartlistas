@@ -120,6 +120,9 @@ class AppOptimizationResultOut(BaseModel):
     total_if_single_store: float
     savings: float
     savings_percent: float
+    total_worst_cost: float = 0.0
+    potential_savings: float = 0.0
+    potential_savings_percent: float = 0.0
     items_without_price: List[int]
     items_outside_selected_stores: List[int] = []
     unoptimized_prices: List[AppFallbackPriceOut] = []
@@ -387,6 +390,21 @@ def optimize_local_payload(
     savings = float(max(0.0, total_if_single_store - total_cost))
     savings_percent = float((savings / total_if_single_store * 100) if total_if_single_store > 0 and savings > 0 else 0.0)
 
+    # KPI "Valor máximo": pior custo possível considerando os itens realmente alocados (otimizados).
+    # Isso ignora itens sem preço recente e itens fora da otimização.
+    allocated_item_ids = {ip.item_id for alloc in allocations for ip in alloc.items}
+    total_worst_cost = 0.0
+    for item_id in allocated_item_ids:
+        candidates = [ip.subtotal for ip in item_prices if ip.item_id == item_id]
+        if not candidates:
+            continue
+        total_worst_cost += float(max(candidates))
+
+    potential_savings = float(max(0.0, total_worst_cost - total_cost))
+    potential_savings_percent = float(
+        (potential_savings / total_worst_cost * 100) if total_worst_cost > 0 and potential_savings > 0 else 0.0
+    )
+
     canonical_ids = [it.canonical_id for it in temp.items]
     products = db.query(CanonicalProduct).filter(CanonicalProduct.id.in_(canonical_ids)).all()
     name_by_id = {p.id: p.nome for p in products}
@@ -469,6 +487,9 @@ def optimize_local_payload(
         total_if_single_store=total_if_single_store,
         savings=savings,
         savings_percent=savings_percent,
+        total_worst_cost=total_worst_cost,
+        potential_savings=potential_savings,
+        potential_savings_percent=potential_savings_percent,
         items_without_price=items_without_price,
         items_outside_selected_stores=outside_canonical_ids,
         unoptimized_prices=unoptimized_prices,

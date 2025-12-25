@@ -114,6 +114,9 @@ type AppOptimizationResult = {
   total_if_single_store: number;
   savings: number;
   savings_percent: number;
+  total_worst_cost?: number;
+  potential_savings?: number;
+  potential_savings_percent?: number;
   items_without_price: number[];
   items_outside_selected_stores?: number[];
   unoptimized_prices?: ShoppingListFallbackPriceItem[];
@@ -253,27 +256,17 @@ export default function ListDetailScreen() {
 
     const optimizedTotal = optimization.allocations.reduce((acc, a) => acc + (Number.isFinite(a.total) ? a.total : 0), 0);
 
-    // Base do backend: savings foi calculado com base em itens com preço recente.
-    // Para o mini-dashboard, removemos do baseline os itens fora da otimização (fora dos supermercados selecionados).
-    const baselineRaw = optimizedTotal + (Number.isFinite(optimization.savings) ? optimization.savings : 0);
+    // Valor máximo deve ser o pior custo possível considerando apenas itens otimizados.
+    // Quando o backend enviar total_worst_cost/potential_savings, usamos diretamente.
+    const worstFromBackend = Number((optimization as any).total_worst_cost);
+    const baselineTotal = Number.isFinite(worstFromBackend) && worstFromBackend > 0 ? worstFromBackend : 0;
 
-    const outsideIds = optimizationSets.outside;
-    const byId = new Map<number, ShoppingListFallbackPriceItem>();
-    for (const p of optimization.unoptimized_prices ?? []) {
-      if (Number.isFinite(p.canonical_id)) byId.set(p.canonical_id, p);
-    }
-    let outsideCost = 0;
-    for (const it of draftItems) {
-      if (!outsideIds.has(it.canonical_id)) continue;
-      const price = byId.get(it.canonical_id);
-      if (!price) continue;
-      const q = Number.isFinite(it.quantity) ? it.quantity : 0;
-      outsideCost += (Number.isFinite(price.price) ? price.price : 0) * q;
-    }
+    const potentialFromBackend = Number((optimization as any).potential_savings);
+    const savings = Number.isFinite(potentialFromBackend) && potentialFromBackend >= 0 ? potentialFromBackend : Math.max(0, baselineTotal - optimizedTotal);
 
-    const baselineTotal = Math.max(0, baselineRaw - outsideCost);
-    const savings = Math.max(0, baselineTotal - optimizedTotal);
-    const savingsPercent = baselineTotal > 0 ? (savings / baselineTotal) * 100 : 0;
+    const pctFromBackend = Number((optimization as any).potential_savings_percent);
+    const savingsPercent =
+      Number.isFinite(pctFromBackend) && pctFromBackend >= 0 ? pctFromBackend : baselineTotal > 0 ? (savings / baselineTotal) * 100 : 0;
 
     return {
       optimizedTotal,
@@ -479,7 +472,9 @@ export default function ListDetailScreen() {
 
     const effectiveMaxStores = Number.isFinite(maxStores) ? Math.min(5, Math.max(1, maxStores)) : 3;
 
-    if (!tokens?.access_token) {
+    const accessToken = tokens?.access_token;
+
+    if (!accessToken) {
       setError('Você precisa estar logado para otimizar a lista');
       return;
     }
@@ -491,19 +486,15 @@ export default function ListDetailScreen() {
       setError('Adicione ao menos 1 item antes de otimizar');
       return;
     }
-
     setIsOptimizing(true);
     try {
       const res = await apiPost<AppOptimizationResult>(
-        `/app/optimization`,
+        '/app/optimization',
         {
           max_stores: effectiveMaxStores,
-          items: draftItems.map((it) => ({
-            canonical_id: it.canonical_id,
-            quantity: it.quantity,
-          })),
+          items: draftItems.map((it) => ({ canonical_id: it.canonical_id, quantity: it.quantity })),
         },
-        { token: tokens.access_token, onRefreshToken: refreshAccessToken }
+        { token: accessToken, onRefreshToken: refreshAccessToken }
       );
 
       if (!res.success) {
@@ -529,6 +520,9 @@ export default function ListDetailScreen() {
         total_cost: res.total_cost,
         savings: res.savings,
         savings_percent: res.savings_percent,
+        total_worst_cost: typeof res.total_worst_cost === 'number' ? res.total_worst_cost : undefined,
+        potential_savings: typeof res.potential_savings === 'number' ? res.potential_savings : undefined,
+        potential_savings_percent: typeof res.potential_savings_percent === 'number' ? res.potential_savings_percent : undefined,
         items_without_price: res.items_without_price,
         items_outside_selected_stores: res.items_outside_selected_stores,
         unoptimized_prices: res.unoptimized_prices,
@@ -550,7 +544,7 @@ export default function ListDetailScreen() {
         optimization: normalized,
         created_at: new Date().toISOString(),
       });
-    } catch (e) {
+    } catch (e: any) {
       const message = e instanceof Error ? e.message : 'Erro ao otimizar lista';
       setError(message);
     } finally {
