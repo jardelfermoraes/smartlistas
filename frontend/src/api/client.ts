@@ -212,6 +212,7 @@ export type SendNotificationResult = {
   requested_tokens: number;
   sent: number;
   failures: number;
+  errors?: Record<string, number> | null;
 };
 
 export type NotificationRuleTrigger = 'manual' | 'price_drop' | 'inactivity' | 'weekly_summary' | 'custom';

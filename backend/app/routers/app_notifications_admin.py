@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Depends
+from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from redis import Redis
 from sqlalchemy import func
@@ -56,6 +57,7 @@ class SendNotificationOut(BaseModel):
     requested_tokens: int
     sent: int
     failures: int
+    errors: Optional[Dict[str, int]] = None
 
 
 RuleTrigger = Literal[
@@ -202,6 +204,8 @@ def send_notification(
 
     sent = 0
     failures = 0
+    errors: Dict[str, int] = {}
+    bad_tokens: List[str] = []
 
     with httpx.Client(timeout=20.0) as client:
         for i in range(0, len(messages), 100):
@@ -214,17 +218,52 @@ def send_notification(
                 data = res.json()
                 receipts = data.get("data") if isinstance(data, dict) else None
                 if isinstance(receipts, list):
-                    for r in receipts:
+                    for idx, r in enumerate(receipts):
                         if isinstance(r, dict) and r.get("status") == "ok":
                             sent += 1
-                        else:
-                            failures += 1
+                            continue
+
+                        failures += 1
+                        details = r.get("details") if isinstance(r, dict) else None
+                        err = None
+                        if isinstance(details, dict):
+                            err = details.get("error")
+                        if not err and isinstance(r, dict):
+                            err = r.get("message")
+                        key = str(err or "unknown")
+                        errors[key] = errors.get(key, 0) + 1
+
+                        # tentativa de limpar tokens inválidos
+                        if key in {"DeviceNotRegistered", "InvalidCredentials", "InvalidPushToken"}:
+                            # mapear token pelo índice do chunk
+                            try:
+                                bad_tokens.append(chunk[idx]["to"])
+                            except Exception:
+                                pass
                 else:
                     sent += len(chunk)
             except Exception:
                 sent += len(chunk)
 
-    return SendNotificationOut(requested_tokens=requested_tokens, sent=sent, failures=failures)
+    if bad_tokens:
+        try:
+            db.query(AppUserSession).filter(AppUserSession.push_token.in_(bad_tokens)).update(
+                {AppUserSession.push_token: None}, synchronize_session=False
+            )
+            db.commit()
+        except Exception:
+            # não falhar o envio por causa disso
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    return SendNotificationOut(
+        requested_tokens=requested_tokens,
+        sent=sent,
+        failures=failures,
+        errors=errors or None,
+    )
 
 
 @router.get("/admin/notifications/rules", response_model=List[NotificationRule])
@@ -232,8 +271,11 @@ def list_rules(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    r = _redis()
-    return _read_rules(r)
+    try:
+        r = _redis()
+        return _read_rules(r)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Redis indisponível")
 
 
 @router.post("/admin/notifications/rules", response_model=NotificationRule)
@@ -256,8 +298,11 @@ def create_rule(
         updated_at=now,
     )
 
-    r = _redis()
-    rules = _read_rules(r)
+    try:
+        r = _redis()
+        rules = _read_rules(r)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Redis indisponível")
     rules.insert(0, rule)
     _write_rules(r, rules)
     return rule
@@ -270,8 +315,11 @@ def update_rule(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    r = _redis()
-    rules = _read_rules(r)
+    try:
+        r = _redis()
+        rules = _read_rules(r)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Redis indisponível")
 
     target = None
     for it in rules:
@@ -280,8 +328,6 @@ def update_rule(
             break
 
     if not target:
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=404, detail="Regra não encontrada")
 
     if data.name is not None:
@@ -310,8 +356,11 @@ def delete_rule(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    r = _redis()
-    rules = _read_rules(r)
+    try:
+        r = _redis()
+        rules = _read_rules(r)
+    except Exception:
+        raise HTTPException(status_code=503, detail="Redis indisponível")
     next_rules = [it for it in rules if it.id != rule_id]
     _write_rules(r, next_rules)
     return {"ok": True}

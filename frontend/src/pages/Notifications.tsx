@@ -96,6 +96,7 @@ export function NotificationsPage() {
 
   const rulesQuery = useQuery({
     queryKey: ['notification-rules'],
+    enabled: tab === 'rules',
     queryFn: async () => {
       const res = await notificationsAdminApi.listRules();
       return res.data;
@@ -364,6 +365,13 @@ export function NotificationsPage() {
             {sendMutation.isSuccess ? (
               <div className="text-sm text-green-700">
                 Enviado: {sendMutation.data.sent} / {sendMutation.data.requested_tokens} (falhas: {sendMutation.data.failures})
+              </div>
+            ) : null}
+            {sendMutation.isSuccess && sendMutation.data.errors ? (
+              <div className="text-xs text-gray-600">
+                {Object.entries(sendMutation.data.errors)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(' | ')}
               </div>
             ) : null}
             {sendMutation.isError ? <div className="text-sm text-red-700">{sendErrorMessage}</div> : null}
