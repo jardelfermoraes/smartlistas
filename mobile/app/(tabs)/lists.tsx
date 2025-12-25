@@ -196,11 +196,27 @@ export default function ListsScreen() {
           gap: 10,
           backgroundColor: 'transparent',
         },
+        cardTopRight: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          backgroundColor: 'transparent',
+        },
         badges: {
           flexDirection: 'row',
           alignItems: 'center',
           gap: 6,
           backgroundColor: 'transparent',
+        },
+        menuBtn: {
+          height: 32,
+          width: 32,
+          borderRadius: 12,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 1,
+          borderColor: theme.colors.border.subtle,
+          backgroundColor: theme.colors.bg.surface,
         },
         badge: {
           borderWidth: 1,
@@ -319,6 +335,32 @@ export default function ListsScreen() {
         },
       },
     ]);
+  }
+
+  function openListActions(list: ShoppingListDraft) {
+    const actions: { text: string; style?: 'default' | 'cancel' | 'destructive'; onPress?: () => void }[] = [];
+
+    actions.push({
+      text: primaryActionLabel(list),
+      onPress: () => openList(list),
+    });
+
+    if (!isCompleted(list) && !isOptimized(list) && list.items.length > 0) {
+      actions.push({
+        text: 'Otimizar',
+        onPress: () => openListAndOptimize(list),
+      });
+    }
+
+    actions.push({
+      text: 'Excluir',
+      style: 'destructive',
+      onPress: () => confirmRemoveList(list),
+    });
+
+    actions.push({ text: 'Cancelar', style: 'cancel' });
+
+    Alert.alert('Ações', list.name || 'Lista', actions);
   }
 
   const visibleLists = useMemo(() => {
@@ -442,29 +484,36 @@ export default function ListsScreen() {
                   backgroundColor: theme.name === 'dark' ? theme.colors.bg.surface : tones[listTone(item)].bg,
                 },
               ]}
-              onPress={() => openList(item)}>
+              onPress={() => openList(item)}
+              onLongPress={() => openListActions(item)}>
               <View style={styles.cardTop}>
                 <Text style={styles.itemName} numberOfLines={1}>
                   {item.name}
                 </Text>
-                <View style={styles.badges}>
-                  {isOptimized(item) ? (
-                    <View style={[styles.badge, { backgroundColor: tones.optimized.bg, borderColor: tones.optimized.border }]}>
-                      <Text style={[styles.badgeText, { color: tones.optimized.text }]}>Otimizada</Text>
-                    </View>
-                  ) : null}
-                  {listTone(item) !== 'optimized' ? (
-                    <View
-                      style={[
-                        styles.badge,
-                        {
-                          backgroundColor: tones[listTone(item)].bg,
-                          borderColor: tones[listTone(item)].border,
-                        },
-                      ]}>
-                      <Text style={[styles.badgeText, { color: tones[listTone(item)].text }]}>{statusLabel(listTone(item))}</Text>
-                    </View>
-                  ) : null}
+                <View style={styles.cardTopRight}>
+                  <View style={styles.badges}>
+                    {isOptimized(item) ? (
+                      <View style={[styles.badge, { backgroundColor: tones.optimized.bg, borderColor: tones.optimized.border }]}>
+                        <Text style={[styles.badgeText, { color: tones.optimized.text }]}>Otimizada</Text>
+                      </View>
+                    ) : null}
+                    {listTone(item) !== 'optimized' ? (
+                      <View
+                        style={[
+                          styles.badge,
+                          {
+                            backgroundColor: tones[listTone(item)].bg,
+                            borderColor: tones[listTone(item)].border,
+                          },
+                        ]}>
+                        <Text style={[styles.badgeText, { color: tones[listTone(item)].text }]}>{statusLabel(listTone(item))}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  <Pressable accessibilityLabel="Ações" style={styles.menuBtn} onPress={() => openListActions(item)}>
+                    <FontAwesome name="ellipsis-h" size={16} color={theme.colors.text.muted} />
+                  </Pressable>
                 </View>
               </View>
 
@@ -496,13 +545,6 @@ export default function ListsScreen() {
                   </Button>
                 ) : null}
               </View>
-            </Pressable>
-
-            <Pressable
-              accessibilityLabel="Excluir lista"
-              style={styles.trashBtn}
-              onPress={() => confirmRemoveList(item)}>
-              <FontAwesome name="trash" size={18} color={theme.colors.danger.text} />
             </Pressable>
           </View>
         )}
