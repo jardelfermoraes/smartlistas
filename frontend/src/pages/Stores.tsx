@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import { Plus, Search, Edit2, Trash2, X, MapPin, CheckCircle, AlertCircle, Map, List } from 'lucide-react';
@@ -24,6 +24,197 @@ const mapOptions = {
   fullscreenControl: true,
 };
 
+function useLeafletCdn(enabled: boolean): boolean {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) {
+      setReady(false);
+      return;
+    }
+
+    const w = window as any;
+    if (w.L) {
+      setReady(true);
+      return;
+    }
+
+    const cssId = 'leaflet-css';
+    const jsId = 'leaflet-js';
+
+    const ensureCss = () => {
+      if (document.getElementById(cssId)) return;
+      const link = document.createElement('link');
+      link.id = cssId;
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    };
+
+    const ensureJs = () => {
+      if (document.getElementById(jsId)) return;
+      const script = document.createElement('script');
+      script.id = jsId;
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+      script.async = true;
+      script.onload = () => setReady(Boolean((window as any).L));
+      script.onerror = () => setReady(false);
+      document.body.appendChild(script);
+    };
+
+    ensureCss();
+    ensureJs();
+
+    const t = window.setInterval(() => {
+      if ((window as any).L) {
+        window.clearInterval(t);
+        setReady(true);
+      }
+    }, 250);
+
+    return () => window.clearInterval(t);
+  }, [enabled]);
+
+  return ready;
+}
+
+function LeafletOsmMap({
+  stores,
+  selectedStore,
+  onSelectStore,
+}: {
+  stores: Store[];
+  selectedStore: Store | null;
+  onSelectStore: (s: Store | null) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<any>(null);
+  const layerRef = useRef<any>(null);
+  const ready = useLeafletCdn(true);
+
+  const storesWithCoords = useMemo(() => stores.filter((s) => Boolean(s.lat) && Boolean(s.lng)), [stores]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!containerRef.current) return;
+    if (mapRef.current) return;
+
+    const L = (window as any).L;
+    const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap',
+    }).addTo(map);
+
+    const layer = L.featureGroup().addTo(map);
+    mapRef.current = map;
+    layerRef.current = layer;
+
+    return () => {
+      try {
+        map.remove();
+      } catch {}
+      mapRef.current = null;
+      layerRef.current = null;
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const L = (window as any).L;
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+
+    const markers: any[] = [];
+    for (const s of storesWithCoords) {
+      const isSelected = Boolean(selectedStore && selectedStore.id === s.id);
+      const isVerified = Boolean(s.verificado);
+      const color = isSelected ? '#2563eb' : isVerified ? '#16a34a' : '#d97706';
+      const marker = L.circleMarker([s.lat, s.lng], {
+        radius: isSelected ? 9 : 7,
+        color,
+        fillColor: color,
+        fillOpacity: 0.9,
+        weight: 2,
+      });
+      marker.on('click', () => onSelectStore(s));
+      marker.addTo(layer);
+      markers.push(marker);
+    }
+
+    if (markers.length > 1) {
+      const bounds = layer.getBounds();
+      if (bounds && bounds.isValid && bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.2));
+      }
+    } else if (markers.length === 1) {
+      const s = storesWithCoords[0];
+      map.setView([s.lat, s.lng], 14);
+    } else {
+      map.setView([defaultCenter.lat, defaultCenter.lng], 6);
+    }
+  }, [ready, onSelectStore, selectedStore, storesWithCoords]);
+
+  return (
+    <div className="relative h-full">
+      {!ready ? (
+        <div className="flex items-center justify-center h-full text-gray-500">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
+            <p>Carregando mapa...</p>
+          </div>
+        </div>
+      ) : null}
+      <div ref={containerRef} className="h-full w-full" />
+
+      <div className="absolute top-3 left-3 bg-white/90 backdrop-blur rounded-lg shadow px-3 py-2 text-xs text-gray-700 flex items-center gap-2">
+        <span className="font-medium">OpenStreetMap</span>
+        <span className="text-gray-400">(fallback)</span>
+      </div>
+
+      {selectedStore && selectedStore.lat && selectedStore.lng ? (
+        <div className="absolute top-3 right-3 bg-white/95 backdrop-blur rounded-lg shadow p-3 text-xs w-[260px]">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="font-semibold text-gray-900 truncate">
+                {selectedStore.nome_fantasia || selectedStore.nome || '-'}
+              </div>
+              <div className="text-gray-600 mt-1 truncate">{selectedStore.endereco || ''}</div>
+              <div className="text-gray-500 mt-1">
+                {selectedStore.cidade}/{selectedStore.uf}
+              </div>
+            </div>
+            <button className="text-gray-400 hover:text-gray-700" onClick={() => onSelectStore(null)}>
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <a
+              href={`https://www.openstreetmap.org/?mlat=${selectedStore.lat}&mlon=${selectedStore.lng}#map=16/${selectedStore.lat}/${selectedStore.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs bg-gray-900 text-white px-3 py-1 rounded hover:bg-black"
+            >
+              Abrir
+            </a>
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${selectedStore.lat},${selectedStore.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600"
+            >
+              Rotas
+            </a>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Stores() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -33,10 +224,13 @@ export function Stores() {
   const [selectedStore, setSelectedStore] = useState<Store | null>(null);
   const [viewMode, setViewMode] = useState<'split' | 'list' | 'map'>('split');
 
+  const googleApiKey = String(import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '').trim();
+  const hasGoogleKey = Boolean(googleApiKey);
+
   // Carrega a API do Google Maps
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    googleMapsApiKey: googleApiKey,
   });
 
   const { data, isLoading } = useQuery({
@@ -273,21 +467,17 @@ export function Stores() {
         {/* Mapa */}
         {(viewMode === 'split' || viewMode === 'map') && (
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden h-full min-h-[400px]">
-            {!isLoaded ? (
+            {!hasGoogleKey ? (
+              <LeafletOsmMap
+                stores={data?.data.items || []}
+                selectedStore={selectedStore}
+                onSelectStore={setSelectedStore}
+              />
+            ) : !isLoaded ? (
               <div className="flex items-center justify-center h-full text-gray-500">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
                   <p>Carregando mapa...</p>
-                </div>
-              </div>
-            ) : !import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                <div className="text-center p-8">
-                  <Map size={48} className="mx-auto mb-4 text-gray-300" />
-                  <p className="font-medium">API Key não configurada</p>
-                  <p className="text-sm mt-2">
-                    Adicione VITE_GOOGLE_MAPS_API_KEY no arquivo .env
-                  </p>
                 </div>
               </div>
             ) : (
@@ -351,7 +541,7 @@ export function Stores() {
             )}
 
             {/* Legenda */}
-            {isLoaded && import.meta.env.VITE_GOOGLE_MAPS_API_KEY && (
+            {isLoaded && hasGoogleKey && (
               <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-xs">
                 <p className="font-medium mb-2">Legenda</p>
                 <div className="space-y-1">
