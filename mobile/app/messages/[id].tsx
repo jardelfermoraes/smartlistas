@@ -11,7 +11,12 @@ import { deleteInboxMessage, getInboxMessageById, InboxMessage, markInboxMessage
 import { useTheme } from '@/lib/theme';
 
 export default function MessageDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, title, body, receivedAt } = useLocalSearchParams<{
+    id?: string;
+    title?: string;
+    body?: string;
+    receivedAt?: string;
+  }>();
   const router = useRouter();
   const theme = useTheme();
 
@@ -26,11 +31,30 @@ export default function MessageDetailsScreen() {
     void (async () => {
       try {
         const found = await getInboxMessageById(safeId);
-        setItem(found);
-        if (found && !found.readAt) {
-          await markInboxMessageRead(safeId);
-          setItem({ ...found, readAt: new Date().toISOString() });
+        if (found) {
+          setItem(found);
+          if (!found.readAt) {
+            await markInboxMessageRead(safeId);
+            setItem({ ...found, readAt: new Date().toISOString() });
+          }
+          return;
         }
+
+        const safeTitle = typeof title === 'string' ? title : '';
+        const safeBody = typeof body === 'string' ? body : '';
+        const safeReceivedAt = typeof receivedAt === 'string' && receivedAt.trim() ? receivedAt : new Date().toISOString();
+        if (safeTitle || safeBody) {
+          setItem({
+            id: safeId,
+            title: safeTitle || 'Notificação',
+            body: safeBody,
+            receivedAt: safeReceivedAt,
+            readAt: null,
+          });
+          return;
+        }
+
+        setItem(null);
       } finally {
         setIsLoading(false);
       }

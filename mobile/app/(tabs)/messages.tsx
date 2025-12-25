@@ -326,7 +326,15 @@ export default function MessagesScreen() {
               }}
               onPress={() => {
                 if (!item?.id) return;
-                router.push({ pathname: '/messages/[id]' as any, params: { id: item.id } } as any);
+                router.push({
+                  pathname: '/messages/[id]' as any,
+                  params: {
+                    id: item.id,
+                    title: item.title,
+                    body: item.body,
+                    receivedAt: item.receivedAt,
+                  },
+                } as any);
               }}>
               <Card style={[styles.itemCard, !item.readAt ? styles.itemCardUnread : null]}>
                 <View style={styles.itemHeaderRow}>
