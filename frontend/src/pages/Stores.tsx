@@ -159,7 +159,7 @@ function LeafletOsmMap({
   }, [ready, onSelectStore, selectedStore, storesWithCoords]);
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-full isolate z-0">
       {!ready ? (
         <div className="flex items-center justify-center h-full text-gray-500">
           <div className="text-center">
@@ -466,7 +466,7 @@ export function Stores() {
 
         {/* Mapa */}
         {(viewMode === 'split' || viewMode === 'map') && (
-          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden h-full min-h-[400px]">
+          <div className="relative isolate z-0 bg-white rounded-xl border border-gray-100 overflow-hidden h-full min-h-[400px]">
             {!hasGoogleKey ? (
               <LeafletOsmMap
                 stores={data?.data.items || []}
