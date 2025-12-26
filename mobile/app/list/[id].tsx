@@ -928,12 +928,19 @@ export default function ListDetailScreen() {
               value={String(maxStores)}
               keyboardType="numeric"
               onChangeText={(v) => {
-                const n = Number(v.replace(/[^0-9]/g, ''));
-                if (!Number.isFinite(n)) {
+                const digits = v.replace(/[^0-9]/g, '');
+                if (!digits) {
                   setMaxStores(3);
                   return;
                 }
-                setMaxStores(Math.min(5, Math.max(1, n)));
+
+                const lastDigit = Number(digits.slice(-1));
+                if (!Number.isFinite(lastDigit)) {
+                  setMaxStores(3);
+                  return;
+                }
+
+                setMaxStores(Math.min(5, Math.max(1, lastDigit)));
               }}
               placeholder="3"
             />
