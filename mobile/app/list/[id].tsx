@@ -923,13 +923,7 @@ export default function ListDetailScreen() {
             <Text style={styles.modalTitle}>Editar lista</Text>
             <Input label="Nome da lista" value={listName} onChangeText={setListName} placeholder="Ex: Jantar" />
 
-            <Input
-              label="Máx. supermercados (1 a 5)"
-              value={String(maxStores)}
-              editable={false}
-              placeholder="3"
-            />
-
+            <Text style={styles.maxStoresLabel}>Máx. supermercados (1 a 5)</Text>
             <View style={styles.maxStoresPills}>
               {[1, 2, 3, 4, 5].map((num) => {
                 const active = maxStores === num;
@@ -1356,12 +1350,19 @@ const makeStyles = (theme: AppTheme) =>
       gap: 8,
       flexWrap: 'wrap',
     },
+    maxStoresLabel: {
+      marginTop: theme.spacing.sm,
+      marginBottom: 6,
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text.muted,
+    },
     maxStoresPills: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
       flexWrap: 'wrap',
-      marginTop: 8,
+      marginTop: 0,
     },
     statusPill: {
       borderWidth: 1,
