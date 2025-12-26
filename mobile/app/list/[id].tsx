@@ -926,24 +926,23 @@ export default function ListDetailScreen() {
             <Input
               label="Máx. supermercados (1 a 5)"
               value={String(maxStores)}
-              keyboardType="numeric"
-              onChangeText={(v) => {
-                const digits = v.replace(/[^0-9]/g, '');
-                if (!digits) {
-                  setMaxStores(3);
-                  return;
-                }
-
-                const lastDigit = Number(digits.slice(-1));
-                if (!Number.isFinite(lastDigit)) {
-                  setMaxStores(3);
-                  return;
-                }
-
-                setMaxStores(Math.min(5, Math.max(1, lastDigit)));
-              }}
+              editable={false}
               placeholder="3"
             />
+
+            <View style={styles.maxStoresPills}>
+              {[1, 2, 3, 4, 5].map((num) => {
+                const active = maxStores === num;
+                return (
+                  <Pressable
+                    key={String(num)}
+                    style={[styles.maxStoresPill, active ? styles.maxStoresPillActive : null]}
+                    onPress={() => setMaxStores(num)}>
+                    <Text style={[styles.maxStoresPillText, active ? styles.maxStoresPillTextActive : null]}>{num}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             <View style={styles.statusRow}>
               <Text style={styles.statusLabel}>Status</Text>
@@ -1357,6 +1356,13 @@ const makeStyles = (theme: AppTheme) =>
       gap: 8,
       flexWrap: 'wrap',
     },
+    maxStoresPills: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginTop: 8,
+    },
     statusPill: {
       borderWidth: 1,
       borderColor: theme.colors.border.subtle,
@@ -1365,15 +1371,37 @@ const makeStyles = (theme: AppTheme) =>
       paddingVertical: 8,
       borderRadius: 999,
     },
+    maxStoresPill: {
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      backgroundColor: theme.colors.bg.surface,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      minWidth: 40,
+      alignItems: 'center',
+    },
     statusPillActive: {
       borderColor: theme.colors.text.primary,
+    },
+    maxStoresPillActive: {
+      borderColor: theme.colors.text.primary,
+      backgroundColor: theme.colors.bg.surfaceAlt,
     },
     statusPillText: {
       fontSize: 12,
       fontWeight: '700',
       color: theme.colors.text.muted,
     },
+    maxStoresPillText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.text.muted,
+    },
     statusPillTextActive: {
+      color: theme.colors.text.primary,
+    },
+    maxStoresPillTextActive: {
       color: theme.colors.text.primary,
     },
     statusAuto: {
