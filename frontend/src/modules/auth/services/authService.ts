@@ -26,6 +26,25 @@ const STORAGE_KEYS = {
  * Serviço de autenticação
  */
 export const authService = {
+  isAccessTokenExpired(skewSeconds: number = 30): boolean {
+    const token = this.getAccessToken();
+    if (!token) return true;
+    const parts = token.split('.');
+    if (parts.length < 2) return false;
+    try {
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const pad = base64.length % 4;
+      if (pad) base64 += '='.repeat(4 - pad);
+      const json = atob(base64);
+      const payload = JSON.parse(json) as { exp?: number };
+      if (typeof payload.exp !== 'number') return false;
+      const now = Date.now() / 1000;
+      return now >= payload.exp - skewSeconds;
+    } catch {
+      return false;
+    }
+  },
+
   /**
    * Realiza login
    */

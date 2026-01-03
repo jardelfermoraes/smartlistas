@@ -29,7 +29,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (storedUser && token) {
         try {
-          // Valida token buscando dados atualizados
+          if (authService.isAccessTokenExpired()) {
+            const refreshResult = await authService.refresh();
+            if (!refreshResult) {
+              authService.clearAuth();
+              setIsLoading(false);
+              return;
+            }
+          }
+
           const currentUser = await authService.getMe();
           setUser(currentUser);
         } catch {
