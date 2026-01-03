@@ -47,7 +47,7 @@ class AppUserRegister(BaseModel):
     phone: Optional[str] = None
     state: Optional[str] = Field(None, max_length=2)
     city: Optional[str] = None
-    shopping_radius_km: float = Field(default=10.0, ge=1, le=50)  # 1km a 50km
+    shopping_radius_km: float = Field(default=10.0, ge=0, le=200)  # 1km a 50km
     referral_code: Optional[str] = Field(default=None, max_length=20)
 
 
@@ -154,7 +154,7 @@ class AppUserUpdate(BaseModel):
     city: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    shopping_radius_km: Optional[float] = Field(None, ge=1, le=50)
+    shopping_radius_km: Optional[float] = Field(None, ge=0, le=200)
     notification_enabled: Optional[bool] = None
     notification_deals: Optional[bool] = None
     notification_price_drop: Optional[bool] = None

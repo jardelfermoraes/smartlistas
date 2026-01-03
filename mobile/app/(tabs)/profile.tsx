@@ -318,8 +318,8 @@ export default function ProfileScreen() {
       setError('Cidade inválida');
       return;
     }
-    if (!Number.isFinite(r) || r < 1 || r > 50) {
-      setError('Raio deve estar entre 1 e 50 km');
+    if (!Number.isFinite(r) || r < 0 || r > 200) {
+      setError('Raio deve estar entre 0 e 200 km');
       return;
     }
 

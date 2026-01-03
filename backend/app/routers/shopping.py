@@ -64,7 +64,7 @@ class ShoppingListCreate(BaseModel):
     max_stores: int = Field(default=3, ge=1, le=5)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    radius_km: float = Field(default=10.0, ge=1, le=50)
+    radius_km: float = Field(default=10.0, ge=0, le=200)
 
 
 class ShoppingListUpdate(BaseModel):
@@ -74,7 +74,7 @@ class ShoppingListUpdate(BaseModel):
     max_stores: Optional[int] = Field(None, ge=1, le=5)
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    radius_km: Optional[float] = Field(None, ge=1, le=50)
+    radius_km: Optional[float] = Field(None, ge=0, le=200)
 
 
 class ShoppingListOut(BaseModel):
