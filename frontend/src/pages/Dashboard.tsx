@@ -91,7 +91,7 @@ function StatCard({ title, value, subtitle, detail, icon: Icon, color }: StatCar
   
   return (
     <div 
-      className={`${styles.bg} rounded-2xl text-white relative overflow-hidden shadow-lg`}
+      className={`${styles.bg} rounded-2xl text-white relative overflow-hidden shadow-md`}
       style={{ padding: '32px' }}
     >
       {/* Ícone de fundo */}
@@ -625,7 +625,7 @@ export function Dashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" style={{ marginBottom: '12px' }}>
         <StatCard
           title="Lojas"
           value={stats?.total_lojas || 0}
@@ -664,7 +664,7 @@ export function Dashboard() {
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-2">
         
         {/* Left Column */}
         <div className="lg:col-span-2 flex flex-col gap-8">
