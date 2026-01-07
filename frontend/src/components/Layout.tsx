@@ -20,17 +20,38 @@ import {
 import { useState } from 'react';
 import { useAuth } from '../modules/auth';
 
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: Home },
-  { path: '/shopping', label: 'Listas de Compras', icon: ShoppingCart },
-  { path: '/stores', label: 'Lojas', icon: Store },
-  { path: '/canonical', label: 'Catálogo', icon: Package },
-  { path: '/prices', label: 'Preços', icon: DollarSign },
-  { path: '/receipts', label: 'Cupons', icon: Receipt },
-  { path: '/app-receipt-keys', label: 'Chaves do App', icon: Smartphone },
-  { path: '/app-payments', label: 'Pagamentos App', icon: CreditCard },
-  { path: '/billing', label: 'Promoções', icon: CreditCard },
-  { path: '/notifications', label: 'Notificações', icon: Bell },
+type NavItem = { path: string; label: string; icon: any; requiresPermission?: string };
+type NavSection = { title: string; items: NavItem[] };
+
+const navSections: NavSection[] = [
+  {
+    title: 'Operação',
+    items: [
+      { path: '/', label: 'Dashboard', icon: Home },
+      { path: '/shopping', label: 'Listas de Compras', icon: ShoppingCart },
+      { path: '/stores', label: 'Lojas', icon: Store },
+      { path: '/canonical', label: 'Catálogo', icon: Package },
+      { path: '/prices', label: 'Preços', icon: DollarSign },
+      { path: '/receipts', label: 'Cupons', icon: Receipt },
+    ],
+  },
+  {
+    title: 'App',
+    items: [
+      { path: '/app-receipt-keys', label: 'Chaves do App', icon: Smartphone },
+      { path: '/app-users', label: 'Usuários App', icon: Smartphone, requiresPermission: 'users.view' },
+      { path: '/app-payments', label: 'Pagamentos App', icon: CreditCard },
+    ],
+  },
+  {
+    title: 'Sistema',
+    items: [
+      { path: '/billing', label: 'Promoções', icon: CreditCard },
+      { path: '/notifications', label: 'Notificações', icon: Bell },
+      { path: '/users', label: 'Usuários', icon: Users, requiresPermission: 'users.view' },
+      { path: '/roles', label: 'Papéis', icon: Shield, requiresPermission: 'users.manage_roles' },
+    ],
+  },
 ];
 
 export function Layout() {
@@ -75,73 +96,35 @@ export function Layout() {
           </div>
         </div>
         <nav className="flex-1 mt-4 px-3 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={`group flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-green-50 text-green-800'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <Icon size={18} className={isActive ? 'text-green-700' : 'text-gray-400 group-hover:text-gray-600'} />
-                {item.label}
-              </Link>
-            );
-          })}
-          
-          {/* Link para Usuários (apenas para quem tem permissão) */}
-          {hasPermission('users.view') && (
-            <Link
-              to="/users"
-              onClick={() => setSidebarOpen(false)}
-              className={`group flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
-                location.pathname === '/users'
-                  ? 'bg-green-50 text-green-800'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <Users size={18} className={location.pathname === '/users' ? 'text-green-700' : 'text-gray-400 group-hover:text-gray-600'} />
-              Usuários
-            </Link>
-          )}
-          
-          {/* Link para Papéis (apenas para quem pode gerenciar roles) */}
-          {hasPermission('users.manage_roles') && (
-            <Link
-              to="/roles"
-              onClick={() => setSidebarOpen(false)}
-              className={`group flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
-                location.pathname === '/roles'
-                  ? 'bg-green-50 text-green-800'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <Shield size={18} className={location.pathname === '/roles' ? 'text-green-700' : 'text-gray-400 group-hover:text-gray-600'} />
-              Papéis
-            </Link>
-          )}
-          
-          {/* Link para Usuários do App */}
-          {hasPermission('users.view') && (
-            <Link
-              to="/app-users"
-              onClick={() => setSidebarOpen(false)}
-              className={`group flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
-                location.pathname === '/app-users'
-                  ? 'bg-green-50 text-green-800'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <Smartphone size={18} className={location.pathname === '/app-users' ? 'text-green-700' : 'text-gray-400 group-hover:text-gray-600'} />
-              Usuários App
-            </Link>
-          )}
+          {navSections.map((section, sectionIdx) => (
+            <div key={section.title} style={{ marginTop: sectionIdx === 0 ? '0' : '18px' }}>
+              <div className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {section.title}
+              </div>
+              {section.items.map((item) => {
+                if (item.requiresPermission && !hasPermission(item.requiresPermission)) return null;
+
+                const Icon = item.icon;
+                const isActive = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={`group flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-green-50 text-green-800'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon size={18} className={isActive ? 'text-green-700' : 'text-gray-400 group-hover:text-gray-600'} />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* User info at bottom */}

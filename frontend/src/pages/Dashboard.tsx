@@ -132,6 +132,8 @@ interface CuponsChartProps {
 
 function CuponsChart({ onPeriodChange }: CuponsChartProps) {
   const [period, setPeriod] = useState(7);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
   
   const { data: chartData, isLoading } = useQuery({
     queryKey: ['cupons-chart', period],
@@ -222,6 +224,45 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
     
     return `${linePath} L ${lastX} ${bottomY} L ${firstX} ${bottomY} Z`;
   };
+
+  const handleChartMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!displayData.length) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPx = e.clientX - rect.left;
+    const xSvg = (xPx / rect.width) * chartWidth;
+
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < displayData.length; i++) {
+      const d = Math.abs(getX(i) - xSvg);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+
+    const d = displayData[bestIdx];
+    const x = getX(bestIdx);
+    const y = Math.min(getYCupons(d.cupons), getYProdutos(d.produtos));
+    const left = (x / chartWidth) * rect.width;
+    const top = (y / chartHeight) * rect.height;
+
+    setHoverIndex(bestIdx);
+
+    const tooltipWidth = 190;
+    const tooltipHeight = 62;
+
+    const clampedLeft = Math.min(Math.max(8, left + 12), rect.width - tooltipWidth - 8);
+    const clampedTop = Math.min(Math.max(8, top - tooltipHeight - 10), rect.height - tooltipHeight - 8);
+
+    setTooltipPos({ left: clampedLeft, top: clampedTop });
+  };
+
+  const handleChartLeave = () => {
+    setHoverIndex(null);
+    setTooltipPos(null);
+  };
   
   return (
     <div>
@@ -299,6 +340,8 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
             viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
             preserveAspectRatio="xMidYMid meet"
             style={{ width: '100%', height: '240px' }}
+            onMouseMove={handleChartMove}
+            onMouseLeave={handleChartLeave}
           >
             {/* Linhas de grade */}
             {[0, 25, 50, 75, 100].map((percent) => {
@@ -351,6 +394,19 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
                 </text>
               );
             })}
+
+            {/* Cursor/seleção */}
+            {hoverIndex !== null && displayData[hoverIndex] && (
+              <line
+                x1={getX(hoverIndex)}
+                y1={padding.top}
+                x2={getX(hoverIndex)}
+                y2={padding.top + graphHeight}
+                stroke="#E5E7EB"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+            )}
             
             {/* Área preenchida - Cupons */}
             <path
@@ -392,10 +448,10 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
                 key={`cupons-${i}`}
                 cx={getX(i)}
                 cy={getYCupons(d.cupons)}
-                r="2.5"
+                r={hoverIndex === i ? 4 : 2.5}
                 fill="#3B82F6"
                 stroke="white"
-                strokeWidth="1"
+                strokeWidth={hoverIndex === i ? 2 : 1}
               />
             ))}
             
@@ -405,10 +461,10 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
                 key={`produtos-${i}`}
                 cx={getX(i)}
                 cy={getYProdutos(d.produtos)}
-                r="2.5"
+                r={hoverIndex === i ? 4 : 2.5}
                 fill="#10B981"
                 stroke="white"
-                strokeWidth="1"
+                strokeWidth={hoverIndex === i ? 2 : 1}
               />
             ))}
             
@@ -442,6 +498,29 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
               );
             })}
           </svg>
+
+          {hoverIndex !== null && tooltipPos && displayData[hoverIndex] && (
+            <div
+              className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg"
+              style={{ left: tooltipPos.left, top: tooltipPos.top, width: '190px', padding: '10px 12px' }}
+            >
+              <div className="text-xs font-semibold text-gray-900">
+                {displayData[hoverIndex].label}
+              </div>
+              <div className="mt-1 flex items-center justify-between text-xs">
+                <span className="text-gray-500">Cupons</span>
+                <span className="font-semibold" style={{ color: '#3B82F6' }}>
+                  {displayData[hoverIndex].cupons}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center justify-between text-xs">
+                <span className="text-gray-500">Produtos</span>
+                <span className="font-semibold" style={{ color: '#10B981' }}>
+                  {displayData[hoverIndex].produtos}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
