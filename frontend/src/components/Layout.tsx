@@ -46,7 +46,7 @@ export function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 md:flex">
       {/* Mobile menu button */}
       <div className="md:hidden fixed top-4 left-4 z-50">
         <button
@@ -59,7 +59,7 @@ export function Layout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200/60 shadow-sm flex flex-col transform transition-transform duration-200 ease-out md:translate-x-0 ${
+        className={`fixed md:sticky md:top-0 md:h-screen inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200/60 shadow-sm flex flex-col transform transition-transform duration-200 ease-out md:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -186,7 +186,7 @@ export function Layout() {
       )}
 
       {/* Main content */}
-      <main className="min-h-screen md:ml-64">
+      <main className="min-h-screen flex-1 min-w-0">
         <div className="p-6 lg:p-8">
           <Outlet />
         </div>
