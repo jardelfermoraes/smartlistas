@@ -7,12 +7,11 @@ import {
   Receipt, 
   TrendingUp,
   Package,
-  Plus,
-  List,
-  Settings,
   LucideIcon,
   ChevronRight,
-  Activity
+  Activity,
+  Smartphone,
+  Users
 } from 'lucide-react';
 import { statsApi, healthApi } from '../api/client';
 
@@ -29,7 +28,7 @@ interface CardProps {
 function Card({ children, title, action, noPadding }: CardProps) {
   return (
     <div 
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm"
+      className="bg-white rounded-2xl border border-gray-200/60 shadow-sm"
       style={{ padding: noPadding ? '0' : '28px' }}
     >
       {title && (
@@ -562,6 +561,9 @@ export function Dashboard() {
   });
 
   const stats = dashboardData?.stats;
+  const dbOk = Boolean(health?.data?.db);
+  const redisOk = Boolean(health?.data?.redis);
+  const systemOk = dbOk && redisOk;
 
   const categoryColors = [
     'bg-blue-500',
@@ -583,12 +585,31 @@ export function Dashboard() {
   }
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      {/* Header */}
-      <h1 className="text-2xl font-bold text-gray-900 mb-8">Painel Administrativo</h1>
+    <div className="max-w-7xl mx-auto p-8 space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Painel</h1>
+          <p className="text-gray-500 mt-1">Visão geral do sistema e atalhos para as rotinas mais usadas.</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/receipts" className="btn-primary">
+            Cupons
+          </Link>
+          <Link to="/stores" className="btn-secondary">
+            Lojas
+          </Link>
+          <Link to="/app-receipt-keys" className="btn-secondary">
+            Chaves do App
+          </Link>
+          <Link to="/app-users" className="btn-secondary">
+            Usuários App
+          </Link>
+        </div>
+      </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" style={{ marginBottom: '48px' }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Lojas"
           value={stats?.total_lojas || 0}
@@ -627,10 +648,10 @@ export function Dashboard() {
       </div>
 
       {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3" style={{ gap: '40px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         
         {/* Left Column */}
-        <div className="lg:col-span-2 flex flex-col" style={{ gap: '32px' }}>
+        <div className="lg:col-span-2 flex flex-col gap-8">
           
           {/* Chart */}
           <Card>
@@ -657,13 +678,13 @@ export function Dashboard() {
             <div className="grid grid-cols-3" style={{ gap: '24px' }}>
               <StatusIndicator 
                 label="Banco de Dados" 
-                sublabel={health?.data?.db ? 'Online' : 'Offline'} 
-                online={health?.data?.db || false} 
+                sublabel={dbOk ? 'Online' : 'Offline'} 
+                online={dbOk} 
               />
               <StatusIndicator 
                 label="Redis (Fila)" 
-                sublabel={health?.data?.redis ? 'Online' : 'Offline'} 
-                online={health?.data?.redis || false} 
+                sublabel={redisOk ? 'Online' : 'Offline'} 
+                online={redisOk} 
               />
               <StatusIndicator 
                 label="API" 
@@ -675,20 +696,26 @@ export function Dashboard() {
         </div>
 
         {/* Right Column */}
-        <div className="flex flex-col" style={{ gap: '32px' }}>
+        <div className="flex flex-col gap-8">
           
           {/* Recent Activity */}
           <Card title="Atividade Recente">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {dashboardData?.atividade_recente?.slice(0, 5).map((atividade, idx) => (
+                (() => {
+                  const [t, ...rest] = atividade.descricao.split(':');
+                  const subtitle = rest.join(':').trim();
+                  return (
                 <ActivityItem
                   key={idx}
                   icon={atividade.tipo === 'cupom' ? Receipt : TrendingUp}
                   iconBg={atividade.tipo === 'cupom' ? 'bg-purple-100' : 'bg-green-100'}
                   iconColor={atividade.tipo === 'cupom' ? 'text-purple-600' : 'text-green-600'}
-                  title={atividade.descricao.split(':')[0]}
-                  subtitle={atividade.descricao.split(':')[1] || ''}
+                  title={t}
+                  subtitle={subtitle}
                 />
+                  );
+                })()
               ))}
               {(!dashboardData?.atividade_recente || dashboardData.atividade_recente.length === 0) && (
                 <p className="text-sm text-gray-400 text-center" style={{ padding: '24px 0' }}>
@@ -700,38 +727,38 @@ export function Dashboard() {
 
           {/* Quick Actions */}
           <Card title="Ações Rápidas">
-            <div className="grid grid-cols-2" style={{ gap: '16px' }}>
+            <div className="grid grid-cols-2 gap-4">
               <QuickAction
                 to="/receipts"
-                icon={Plus}
-                iconBg="bg-green-100"
-                iconColor="text-green-600"
-                label="Importar"
-                sublabel="Cupom"
-              />
-              <QuickAction
-                to="/canonical"
-                icon={List}
-                iconBg="bg-blue-100"
-                iconColor="text-blue-600"
-                label="Ver"
-                sublabel="Catálogo"
+                icon={Receipt}
+                iconBg="bg-orange-100"
+                iconColor="text-orange-600"
+                label="Cupons"
+                sublabel="Importar e revisar"
               />
               <QuickAction
                 to="/stores"
                 icon={Store}
-                iconBg="bg-purple-100"
-                iconColor="text-purple-600"
-                label="Gerenciar"
-                sublabel="Lojas"
+                iconBg="bg-blue-100"
+                iconColor="text-blue-600"
+                label="Lojas"
+                sublabel="Gerenciar"
               />
               <QuickAction
-                to="/prices"
-                icon={Settings}
-                iconBg="bg-orange-100"
-                iconColor="text-orange-600"
-                label="Ver"
-                sublabel="Preços"
+                to="/app-receipt-keys"
+                icon={Smartphone}
+                iconBg="bg-green-100"
+                iconColor="text-green-600"
+                label="Chaves"
+                sublabel="Triagem do app"
+              />
+              <QuickAction
+                to="/app-users"
+                icon={Users}
+                iconBg="bg-purple-100"
+                iconColor="text-purple-600"
+                label="Usuários"
+                sublabel="App"
               />
             </div>
           </Card>
@@ -741,20 +768,20 @@ export function Dashboard() {
             <div className="flex items-center" style={{ gap: '16px' }}>
               <div 
                 className={`rounded-full flex items-center justify-center ${
-                  health?.data?.redis ? 'bg-green-100' : 'bg-orange-100'
+                  systemOk ? 'bg-green-100' : 'bg-orange-100'
                 }`}
                 style={{ width: '48px', height: '48px' }}
               >
-                <Activity size={20} className={health?.data?.redis ? 'text-green-600' : 'text-orange-600'} />
+                <Activity size={20} className={systemOk ? 'text-green-600' : 'text-orange-600'} />
               </div>
               <div>
-                <p className="text-base font-medium text-gray-900">Sistema Operacional</p>
-                <p className="text-sm text-gray-500">Todos os serviços funcionando</p>
+                <p className="text-base font-medium text-gray-900">Saúde do sistema</p>
+                <p className="text-sm text-gray-500">{systemOk ? 'Todos os serviços funcionando' : 'Há serviços com instabilidade'}</p>
               </div>
             </div>
             <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f3f4f6' }}>
-              <Link to="#" className="text-sm text-blue-600 hover:underline">
-                Ver Logs do Sistema →
+              <Link to="/notifications" className="text-sm text-blue-600 hover:underline">
+                Ver notificações →
               </Link>
             </div>
           </Card>
