@@ -602,26 +602,9 @@ export function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-10 pb-6 lg:px-8 lg:pt-12 lg:pb-8 space-y-12">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Painel</h1>
-          <p className="text-gray-500 mt-1">Visão geral do sistema e atalhos para as rotinas mais usadas.</p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/receipts" className="btn-primary">
-            Cupons
-          </Link>
-          <Link to="/stores" className="btn-secondary">
-            Lojas
-          </Link>
-          <Link to="/app-receipt-keys" className="btn-secondary">
-            Chaves do App
-          </Link>
-          <Link to="/app-users" className="btn-secondary">
-            Usuários App
-          </Link>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Painel</h1>
+        <p className="text-gray-500 mt-1">Visão geral do sistema e atalhos para as rotinas mais usadas.</p>
       </div>
 
       {/* Stats Cards */}
