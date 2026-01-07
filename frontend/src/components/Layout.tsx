@@ -25,30 +25,35 @@ type NavSection = { title: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
   {
-    title: 'Operação',
+    title: 'Principal',
     items: [
       { path: '/', label: 'Dashboard', icon: Home },
-      { path: '/shopping', label: 'Listas de Compras', icon: ShoppingCart },
       { path: '/stores', label: 'Lojas', icon: Store },
+      { path: '/receipts', label: 'Cupons', icon: Receipt },
+    ],
+  },
+  {
+    title: 'Cadastro & Operação',
+    items: [
+      { path: '/shopping', label: 'Listas de Compras', icon: ShoppingCart },
       { path: '/canonical', label: 'Catálogo', icon: Package },
       { path: '/prices', label: 'Preços', icon: DollarSign },
-      { path: '/receipts', label: 'Cupons', icon: Receipt },
     ],
   },
   {
     title: 'App',
     items: [
       { path: '/app-receipt-keys', label: 'Chaves do App', icon: Smartphone },
-      { path: '/app-users', label: 'Usuários App', icon: Smartphone, requiresPermission: 'users.view' },
+      { path: '/app-users', label: 'Usuários App', icon: Users, requiresPermission: 'users.view' },
       { path: '/app-payments', label: 'Pagamentos App', icon: CreditCard },
     ],
   },
   {
-    title: 'Sistema',
+    title: 'Administração',
     items: [
-      { path: '/billing', label: 'Promoções', icon: CreditCard },
       { path: '/notifications', label: 'Notificações', icon: Bell },
-      { path: '/users', label: 'Usuários', icon: Users, requiresPermission: 'users.view' },
+      { path: '/billing', label: 'Promoções', icon: CreditCard },
+      { path: '/users', label: 'Usuários', icon: User, requiresPermission: 'users.view' },
       { path: '/roles', label: 'Papéis', icon: Shield, requiresPermission: 'users.manage_roles' },
     ],
   },
@@ -97,8 +102,11 @@ export function Layout() {
         </div>
         <nav className="flex-1 mt-4 px-3 overflow-y-auto">
           {navSections.map((section, sectionIdx) => (
-            <div key={section.title} style={{ marginTop: sectionIdx === 0 ? '0' : '18px' }}>
-              <div className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            <div
+              key={section.title}
+              className={sectionIdx === 0 ? '' : 'mt-4 pt-4 border-t border-gray-200/60'}
+            >
+              <div className="px-3 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 {section.title}
               </div>
               {section.items.map((item) => {
