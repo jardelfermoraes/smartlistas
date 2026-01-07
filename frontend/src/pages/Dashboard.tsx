@@ -29,18 +29,18 @@ function Card({ children, title, action, noPadding }: CardProps) {
   return (
     <div 
       className="bg-white rounded-2xl border border-gray-200/60 shadow-sm"
-      style={{ padding: noPadding ? '0' : '28px' }}
+      style={{ padding: noPadding ? '0' : '24px' }}
     >
       {title && (
         <div 
           className="flex items-center justify-between"
-          style={{ marginBottom: '20px', padding: noPadding ? '28px 28px 0 28px' : '0' }}
+          style={{ marginBottom: '16px', padding: noPadding ? '24px 24px 0 24px' : '0' }}
         >
           <h2 className="font-semibold text-gray-900">{title}</h2>
           {action}
         </div>
       )}
-      <div style={{ padding: noPadding ? '0 28px 28px 28px' : '0' }}>
+      <div style={{ padding: noPadding ? '0 24px 24px 24px' : '0' }}>
         {children}
       </div>
     </div>
@@ -152,15 +152,15 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
   const shouldGroup = period > 15;
   
   // Calcula pontos para o SVG
-  const chartWidth = 100; // percentual
-  const chartHeight = 180;
-  const padding = { left: 40, right: 40, top: 10, bottom: 30 };
-  const graphWidth = chartWidth;
+  const chartWidth = 640;
+  const chartHeight = 240;
+  const padding = { left: 56, right: 56, top: 18, bottom: 42 };
+  const graphWidth = chartWidth - padding.left - padding.right;
   const graphHeight = chartHeight - padding.top - padding.bottom;
   
   const getX = (index: number) => {
     if (displayData.length <= 1) return padding.left;
-    return padding.left + (index / (displayData.length - 1)) * (graphWidth - padding.left - padding.right);
+    return padding.left + (index / (displayData.length - 1)) * graphWidth;
   };
   
   // Y para cupons (escala esquerda)
@@ -256,20 +256,20 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
       </div>
 
       {/* Estatísticas resumidas */}
-      <div className="grid grid-cols-4" style={{ gap: '12px', marginBottom: '24px' }}>
-        <div className="bg-blue-50 rounded-xl" style={{ padding: '14px' }}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginBottom: '20px' }}>
+        <div className="bg-blue-50 rounded-xl" style={{ padding: '12px' }}>
           <p className="text-blue-600 font-bold" style={{ fontSize: '22px' }}>{chartData?.totals?.cupons || 0}</p>
           <p className="text-blue-600/70" style={{ fontSize: '11px' }}>Cupons</p>
         </div>
-        <div className="bg-green-50 rounded-xl" style={{ padding: '14px' }}>
+        <div className="bg-green-50 rounded-xl" style={{ padding: '12px' }}>
           <p className="text-green-600 font-bold" style={{ fontSize: '22px' }}>{chartData?.totals?.produtos || 0}</p>
           <p className="text-green-600/70" style={{ fontSize: '11px' }}>Novos Produtos</p>
         </div>
-        <div className="bg-blue-50/50 rounded-xl" style={{ padding: '14px' }}>
+        <div className="bg-blue-50/50 rounded-xl" style={{ padding: '12px' }}>
           <p className="text-blue-500 font-bold" style={{ fontSize: '22px' }}>{chartData?.medias?.cupons || 0}</p>
           <p className="text-blue-500/70" style={{ fontSize: '11px' }}>Média Cupons/dia</p>
         </div>
-        <div className="bg-green-50/50 rounded-xl" style={{ padding: '14px' }}>
+        <div className="bg-green-50/50 rounded-xl" style={{ padding: '12px' }}>
           <p className="text-green-500 font-bold" style={{ fontSize: '22px' }}>{chartData?.medias?.produtos || 0}</p>
           <p className="text-green-500/70" style={{ fontSize: '11px' }}>Média Produtos/dia</p>
         </div>
@@ -294,29 +294,11 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
         </div>
       ) : (
         <div style={{ position: 'relative' }}>
-          {/* Eixo Y Esquerdo - Cupons (azul) */}
-          <div className="absolute flex flex-col justify-between text-right" style={{ left: '0', top: '10px', bottom: '30px', width: '35px' }}>
-            {[100, 75, 50, 25, 0].map((percent) => (
-              <span key={percent} className="text-blue-500" style={{ fontSize: '10px', lineHeight: '1' }}>
-                {Math.round((maxCupons * percent) / 100)}
-              </span>
-            ))}
-          </div>
-          
-          {/* Eixo Y Direito - Produtos (verde) */}
-          <div className="absolute flex flex-col justify-between text-left" style={{ right: '0', top: '10px', bottom: '30px', width: '35px' }}>
-            {[100, 75, 50, 25, 0].map((percent) => (
-              <span key={percent} className="text-green-500" style={{ fontSize: '10px', lineHeight: '1' }}>
-                {Math.round((maxProdutos * percent) / 100)}
-              </span>
-            ))}
-          </div>
-          
           {/* SVG do gráfico */}
           <svg 
             viewBox={`0 0 ${chartWidth} ${chartHeight}`} 
-            preserveAspectRatio="none"
-            style={{ width: '100%', height: '200px' }}
+            preserveAspectRatio="xMidYMid meet"
+            style={{ width: '100%', height: '240px' }}
           >
             {/* Linhas de grade */}
             {[0, 25, 50, 75, 100].map((percent) => {
@@ -331,6 +313,42 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
                   stroke="#f3f4f6"
                   strokeWidth="0.3"
                 />
+              );
+            })}
+
+            {/* Labels eixo Y (Cupons - esquerda) */}
+            {[100, 75, 50, 25, 0].map((percent) => {
+              const y = padding.top + graphHeight - (percent / 100) * graphHeight;
+              const v = Math.round((maxCupons * percent) / 100);
+              return (
+                <text
+                  key={`yL-${percent}`}
+                  x={padding.left - 10}
+                  y={y + 4}
+                  textAnchor="end"
+                  fontSize="10"
+                  fill="#3B82F6"
+                >
+                  {v}
+                </text>
+              );
+            })}
+
+            {/* Labels eixo Y (Produtos - direita) */}
+            {[100, 75, 50, 25, 0].map((percent) => {
+              const y = padding.top + graphHeight - (percent / 100) * graphHeight;
+              const v = Math.round((maxProdutos * percent) / 100);
+              return (
+                <text
+                  key={`yR-${percent}`}
+                  x={chartWidth - padding.right + 10}
+                  y={y + 4}
+                  textAnchor="start"
+                  fontSize="10"
+                  fill="#10B981"
+                >
+                  {v}
+                </text>
               );
             })}
             
@@ -405,27 +423,25 @@ function CuponsChart({ onPeriodChange }: CuponsChartProps) {
                 <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
               </linearGradient>
             </defs>
-          </svg>
-          
-          {/* Eixo X - Labels das datas */}
-          <div 
-            className="flex justify-between"
-            style={{ marginLeft: '40px', marginRight: '40px' }}
-          >
+
+            {/* Eixo X - Labels das datas */}
             {displayData.map((item, idx) => {
               const showLabel = !shouldGroup || idx % Math.ceil(displayData.length / 7) === 0 || idx === displayData.length - 1;
-              
+              if (!showLabel) return null;
               return (
-                <div key={idx} className="flex-1 text-center">
-                  {showLabel && (
-                    <span className="text-gray-500" style={{ fontSize: '11px' }}>
-                      {item.label}
-                    </span>
-                  )}
-                </div>
+                <text
+                  key={`x-${idx}`}
+                  x={getX(idx)}
+                  y={chartHeight - 14}
+                  textAnchor="middle"
+                  fontSize="11"
+                  fill="#6B7280"
+                >
+                  {item.label}
+                </text>
               );
             })}
-          </div>
+          </svg>
         </div>
       )}
     </div>
@@ -585,7 +601,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-8 space-y-8">
+    <div className="max-w-7xl mx-auto p-6 lg:p-8 space-y-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Painel</h1>
