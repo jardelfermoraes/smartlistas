@@ -9,7 +9,6 @@ import {
   Package,
   LucideIcon,
   ChevronRight,
-  Activity,
   Smartphone,
   Users
 } from 'lucide-react';
@@ -566,9 +565,23 @@ interface StatusIndicatorProps {
   label: string;
   sublabel: string;
   online: boolean;
+  variant?: 'default' | 'pill';
 }
 
-function StatusIndicator({ label, sublabel, online }: StatusIndicatorProps) {
+function StatusIndicator({ label, sublabel, online, variant = 'default' }: StatusIndicatorProps) {
+  if (variant === 'pill') {
+    return (
+      <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1.5">
+        <span
+          className={`inline-block rounded-full ${online ? 'bg-green-500' : 'bg-red-500'}`}
+          style={{ width: '8px', height: '8px' }}
+        />
+        <span className="text-xs font-medium text-gray-700">{label}</span>
+        <span className="text-xs text-gray-500">{sublabel}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center" style={{ gap: '12px' }}>
       <div 
@@ -658,7 +671,6 @@ export function Dashboard() {
   const stats = dashboardData?.stats;
   const dbOk = Boolean(health?.data?.db);
   const redisOk = Boolean(health?.data?.redis);
-  const systemOk = dbOk && redisOk;
 
   const categoryColors = [
     'bg-blue-500',
@@ -681,9 +693,17 @@ export function Dashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-10 pb-6 lg:px-8 lg:pt-12 lg:pb-8 space-y-12">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Painel</h1>
-        <p className="text-gray-500 mt-1">Visão geral do sistema e atalhos para as rotinas mais usadas.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Painel</h1>
+          <p className="text-gray-500 mt-1">Visão geral do sistema e atalhos para as rotinas mais usadas.</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <StatusIndicator label="DB" sublabel={dbOk ? 'Online' : 'Offline'} online={dbOk} variant="pill" />
+          <StatusIndicator label="Redis" sublabel={redisOk ? 'Online' : 'Offline'} online={redisOk} variant="pill" />
+          <StatusIndicator label="API" sublabel="Online" online={true} variant="pill" />
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -749,27 +769,6 @@ export function Dashboard() {
               data={dashboardData?.produtos_por_categoria?.slice(0, 8) || []}
               colors={categoryColors}
             />
-          </Card>
-
-          {/* System Status */}
-          <Card title="Status do Sistema">
-            <div className="grid grid-cols-3" style={{ gap: '24px' }}>
-              <StatusIndicator 
-                label="Banco de Dados" 
-                sublabel={dbOk ? 'Online' : 'Offline'} 
-                online={dbOk} 
-              />
-              <StatusIndicator 
-                label="Redis (Fila)" 
-                sublabel={redisOk ? 'Online' : 'Offline'} 
-                online={redisOk} 
-              />
-              <StatusIndicator 
-                label="API" 
-                sublabel="Online" 
-                online={true} 
-              />
-            </div>
           </Card>
         </div>
 
@@ -841,28 +840,6 @@ export function Dashboard() {
             </div>
           </Card>
 
-          {/* System Info Card */}
-          <Card>
-            <div className="flex items-center" style={{ gap: '16px' }}>
-              <div 
-                className={`rounded-full flex items-center justify-center ${
-                  systemOk ? 'bg-green-100' : 'bg-orange-100'
-                }`}
-                style={{ width: '48px', height: '48px' }}
-              >
-                <Activity size={20} className={systemOk ? 'text-green-600' : 'text-orange-600'} />
-              </div>
-              <div>
-                <p className="text-base font-medium text-gray-900">Saúde do sistema</p>
-                <p className="text-sm text-gray-500">{systemOk ? 'Todos os serviços funcionando' : 'Há serviços com instabilidade'}</p>
-              </div>
-            </div>
-            <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #f3f4f6' }}>
-              <Link to="/notifications" className="text-sm text-blue-600 hover:underline">
-                Ver notificações →
-              </Link>
-            </div>
-          </Card>
         </div>
       </div>
     </div>
