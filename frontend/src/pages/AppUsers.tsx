@@ -138,7 +138,9 @@ export function AppUsers() {
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
-    return new Date(dateStr).toLocaleDateString('pt-BR', {
+    const d = new Date(dateStr);
+    if (!Number.isFinite(d.getTime())) return '-';
+    return d.toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -154,7 +156,9 @@ export function AppUsers() {
 
   const formatDateTime = (dateStr: string | null) => {
     if (!dateStr) return 'Nunca';
-    return new Date(dateStr).toLocaleString('pt-BR', {
+    const d = new Date(dateStr);
+    if (!Number.isFinite(d.getTime())) return 'Nunca';
+    return d.toLocaleString('pt-BR', {
       day: '2-digit',
       month: 'short',
       hour: '2-digit',
