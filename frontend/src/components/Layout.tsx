@@ -100,13 +100,13 @@ export function Layout() {
             </div>
           </div>
         </div>
-        <nav className="flex-1 mt-4 px-3 overflow-y-auto">
+        <nav className="flex-1 mt-4 px-4 overflow-y-auto">
           {navSections.map((section, sectionIdx) => (
             <div
               key={section.title}
               className={sectionIdx === 0 ? '' : 'mt-4 pt-4 border-t border-gray-200/60'}
             >
-              <div className="px-3 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="px-4 mb-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 {section.title}
               </div>
               {section.items.map((item) => {
@@ -120,7 +120,7 @@ export function Layout() {
                     key={item.path}
                     to={item.path}
                     onClick={() => setSidebarOpen(false)}
-                    className={`group flex items-center gap-3 px-3 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
+                    className={`group flex items-center gap-3 px-4 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-green-50 text-green-800'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
