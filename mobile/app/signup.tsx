@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet } from 'react-native';
 
@@ -12,8 +12,16 @@ import { useTheme } from '@/lib/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ referral_code?: string | string[]; ref?: string | string[] }>();
   const theme = useTheme();
   const { isLoading, isAuthenticated, signUpWithEmail } = useAuth();
+
+  const referralCode = (() => {
+    const raw = params.referral_code ?? params.ref;
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    const code = (v ?? '').trim();
+    return code ? code.toUpperCase() : null;
+  })();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -243,6 +251,7 @@ export default function SignupScreen() {
                 phone: phone.replace(/\D/g, '') || null,
                 birth_date: parsedBirth,
                 gender: gender || null,
+                referral_code: referralCode,
               });
               router.replace('/(tabs)');
             } catch (e) {

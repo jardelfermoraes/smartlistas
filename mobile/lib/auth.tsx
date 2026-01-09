@@ -36,7 +36,13 @@ type AuthContextValue = {
   user: AppUser | null;
   signInWithEmail(email: string, password: string): Promise<void>;
   signUpWithEmail(
-    data: Pick<AppUser, 'name' | 'email'> & { password: string; phone?: string | null; birth_date?: string | null; gender?: string | null }
+    data: Pick<AppUser, 'name' | 'email'> & {
+      password: string;
+      phone?: string | null;
+      birth_date?: string | null;
+      gender?: string | null;
+      referral_code?: string | null;
+    }
   ): Promise<void>;
   updateProfile(
     data: Partial<Pick<AppUser, 'name' | 'phone' | 'birth_date' | 'gender' | 'state' | 'city' | 'shopping_radius_km'>>
@@ -205,6 +211,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             phone: dataIn.phone ?? null,
             birth_date: dataIn.birth_date ?? null,
             gender: dataIn.gender ?? null,
+            referral_code: dataIn.referral_code ?? null,
           });
           const nextTokens: AuthTokens = {
             access_token: data.access_token,

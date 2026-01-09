@@ -211,11 +211,14 @@ export default function ProfileScreen() {
   async function handleInvite() {
     try {
       const code = (user?.referral_code ?? '').trim();
-      const inviteLink = code
+      const deepLink = code
+        ? `mobile://signup?referral_code=${encodeURIComponent(code)}`
+        : 'mobile://signup';
+      const webLink = code
         ? `https://cadastro.smartlistas.com.br/r/${encodeURIComponent(code)}`
         : 'https://cadastro.smartlistas.com.br/cadastro';
       const message =
-        `Vem usar o SmartListas comigo para montar listas de compras e economizar no supermercado!\n\nCrie sua conta por aqui: ${inviteLink}`;
+        `Vem usar o SmartListas comigo para montar listas de compras e economizar no supermercado!\n\nCrie sua conta por aqui: ${deepLink}\n\nSe não abrir no app, use: ${webLink}`;
       await Share.share({ message });
     } catch {
       // ignore
