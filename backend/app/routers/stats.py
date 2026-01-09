@@ -11,7 +11,17 @@ from slowapi.util import get_remote_address
 from sqlalchemy import func, desc
 
 from ..database import DbSession
-from ..models import CanonicalProduct, Price, ProductAlias, Receipt, Store
+from ..models import (
+    AppBillingSettings,
+    AppPayment,
+    AppPurchase,
+    AppUser,
+    CanonicalProduct,
+    Price,
+    ProductAlias,
+    Receipt,
+    Store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +78,36 @@ class DashboardData(BaseModel):
     produtos_por_categoria: List[ChartDataPoint]
     atividade_recente: List[RecentActivity]
     alertas: List[Alert]
+
+
+class SingleSeriesPoint(BaseModel):
+    label: str
+    date: str
+    value: int
+
+
+class SingleSeriesChartResponse(BaseModel):
+    data: List[SingleSeriesPoint]
+    totals: dict
+    medias: dict
+    max: dict
+    days: int
+
+
+class RevenueSeriesPoint(BaseModel):
+    label: str
+    date: str
+    predicted_cents: int
+    realized_cents: int
+
+
+class RevenueChartResponse(BaseModel):
+    data: List[RevenueSeriesPoint]
+    predicted_monthly_cents: int
+    realized_cents: int
+    active_subscriptions: int
+    monthly_price_cents: int
+    days: int
 
 
 # === Endpoints ===
@@ -319,6 +359,156 @@ def get_cupons_chart(request: Request, db: DbSession, days: int = 7):
         },
         "days": days
     }
+
+
+@router.get("/chart/app-users", response_model=SingleSeriesChartResponse)
+@limiter.limit("60/minute")
+def get_app_users_chart(request: Request, db: DbSession, days: int = 30):
+    days = max(7, min(90, days))
+
+    now = datetime.now(UTC)
+    data: list[SingleSeriesPoint] = []
+
+    for i in range(days - 1, -1, -1):
+        dia = now - timedelta(days=i)
+        dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
+        dia_fim = dia_inicio + timedelta(days=1)
+
+        count = (
+            db.query(AppUser)
+            .filter(AppUser.created_at >= dia_inicio, AppUser.created_at < dia_fim)
+            .count()
+        )
+
+        data.append(
+            SingleSeriesPoint(
+                label=dia.strftime("%d/%m"),
+                date=dia.strftime("%Y-%m-%d"),
+                value=int(count),
+            )
+        )
+
+    total = sum(p.value for p in data)
+    max_value = max((p.value for p in data), default=0)
+    days_with_value = sum(1 for p in data if p.value > 0)
+    avg = total / days_with_value if days_with_value else 0
+
+    return SingleSeriesChartResponse(
+        data=data,
+        totals={"value": total},
+        medias={"value": round(avg, 1)},
+        max={"value": max_value},
+        days=days,
+    )
+
+
+@router.get("/chart/app-purchases", response_model=SingleSeriesChartResponse)
+@limiter.limit("60/minute")
+def get_app_purchases_chart(request: Request, db: DbSession, days: int = 30):
+    days = max(7, min(90, days))
+
+    now = datetime.now(UTC)
+    data: list[SingleSeriesPoint] = []
+
+    for i in range(days - 1, -1, -1):
+        dia = now - timedelta(days=i)
+        dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
+        dia_fim = dia_inicio + timedelta(days=1)
+
+        count = (
+            db.query(AppPurchase)
+            .filter(
+                AppPurchase.finished_at >= dia_inicio,
+                AppPurchase.finished_at < dia_fim,
+                AppPurchase.status_final == "completed",
+            )
+            .count()
+        )
+
+        data.append(
+            SingleSeriesPoint(
+                label=dia.strftime("%d/%m"),
+                date=dia.strftime("%Y-%m-%d"),
+                value=int(count),
+            )
+        )
+
+    total = sum(p.value for p in data)
+    max_value = max((p.value for p in data), default=0)
+    days_with_value = sum(1 for p in data if p.value > 0)
+    avg = total / days_with_value if days_with_value else 0
+
+    return SingleSeriesChartResponse(
+        data=data,
+        totals={"value": total},
+        medias={"value": round(avg, 1)},
+        max={"value": max_value},
+        days=days,
+    )
+
+
+@router.get("/chart/revenue", response_model=RevenueChartResponse)
+@limiter.limit("60/minute")
+def get_revenue_chart(request: Request, db: DbSession, days: int = 30):
+    days = max(7, min(90, days))
+
+    now = datetime.now(UTC)
+    settings = db.query(AppBillingSettings).order_by(AppBillingSettings.id.asc()).first()
+    monthly_price_cents = int(settings.monthly_price_cents) if settings else 1500
+
+    active_subscriptions = (
+        db.query(AppUser)
+        .filter(
+            AppUser.is_active == True,
+            AppUser.subscription_ends_at.isnot(None),
+            AppUser.subscription_ends_at >= now,
+        )
+        .count()
+    )
+
+    predicted_monthly_cents = int(active_subscriptions) * monthly_price_cents
+    running_realized = 0
+
+    data: list[RevenueSeriesPoint] = []
+    for i in range(days - 1, -1, -1):
+        dia = now - timedelta(days=i)
+        dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
+        dia_fim = dia_inicio + timedelta(days=1)
+
+        approved_sum = (
+            db.query(func.coalesce(func.sum(AppPayment.amount_cents), 0))
+            .filter(
+                AppPayment.status == "approved",
+                AppPayment.approved_at.isnot(None),
+                AppPayment.approved_at >= dia_inicio,
+                AppPayment.approved_at < dia_fim,
+            )
+            .scalar()
+        )
+        try:
+            approved_sum_int = int(approved_sum or 0)
+        except Exception:
+            approved_sum_int = 0
+
+        running_realized += approved_sum_int
+
+        data.append(
+            RevenueSeriesPoint(
+                label=dia.strftime("%d/%m"),
+                date=dia.strftime("%Y-%m-%d"),
+                predicted_cents=predicted_monthly_cents,
+                realized_cents=running_realized,
+            )
+        )
+
+    return RevenueChartResponse(
+        data=data,
+        predicted_monthly_cents=predicted_monthly_cents,
+        realized_cents=running_realized,
+        active_subscriptions=int(active_subscriptions),
+        monthly_price_cents=monthly_price_cents,
+        days=days,
+    )
 
 
 @router.get("/health")

@@ -432,10 +432,45 @@ export interface ChartResponse {
   days: number;
 }
 
+export interface SingleSeriesPoint {
+  label: string;
+  date: string;
+  value: number;
+}
+
+export interface SingleSeriesChartResponse {
+  data: SingleSeriesPoint[];
+  totals: { value: number };
+  medias: { value: number };
+  max: { value: number };
+  days: number;
+}
+
+export interface RevenueSeriesPoint {
+  label: string;
+  date: string;
+  predicted_cents: number;
+  realized_cents: number;
+}
+
+export interface RevenueChartResponse {
+  data: RevenueSeriesPoint[];
+  predicted_monthly_cents: number;
+  realized_cents: number;
+  active_subscriptions: number;
+  monthly_price_cents: number;
+  days: number;
+}
+
 export const statsApi = {
   getDashboard: () => api.get<DashboardData>('/stats/dashboard'),
   getHealth: () => api.get<{ database: string; redis: string; api: string }>('/stats/health'),
   getCuponsChart: (days: number = 7) => api.get<ChartResponse>('/stats/chart/cupons', { params: { days } }),
+  getAppUsersChart: (days: number = 30) =>
+    api.get<SingleSeriesChartResponse>('/stats/chart/app-users', { params: { days } }),
+  getAppPurchasesChart: (days: number = 30) =>
+    api.get<SingleSeriesChartResponse>('/stats/chart/app-purchases', { params: { days } }),
+  getRevenueChart: (days: number = 30) => api.get<RevenueChartResponse>('/stats/chart/revenue', { params: { days } }),
 };
 
 export const canonicalApi = {
