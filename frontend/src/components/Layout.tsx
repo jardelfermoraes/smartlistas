@@ -90,7 +90,7 @@ export function Layout() {
         }`}
       >
         <div className="h-16 border-b border-gray-200/60 flex items-center px-6">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center" style={{ gap: '18px' }}>
             <div className="w-9 h-9 rounded-xl bg-green-600 flex items-center justify-center text-white font-bold">
               S
             </div>
