@@ -16,6 +16,7 @@ from pydantic import BaseModel, EmailStr, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -250,6 +251,29 @@ def _generate_referral_code() -> str:
     return secrets.token_urlsafe(6).replace('-', '').replace('_', '')[:10].upper()
 
 
+def _ensure_user_referral_code(db: Session, user: AppUser) -> None:
+    current = (user.referral_code or '').strip().upper()
+    if current:
+        if current != (user.referral_code or ''):
+            user.referral_code = current
+        return
+
+    for _ in range(10):
+        candidate = _generate_referral_code()
+        exists = db.query(AppUser).filter(AppUser.referral_code == candidate).first()
+        if exists:
+            continue
+
+        user.referral_code = candidate
+        try:
+            db.commit()
+            db.refresh(user)
+            return
+        except IntegrityError:
+            db.rollback()
+            continue
+
+
 def decode_token(token: str) -> dict:
     """Decodifica e valida JWT."""
     try:
@@ -407,6 +431,8 @@ def login(request: Request, data: AppUserLogin, db: Session = Depends(get_db)):
     
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Conta desativada")
+
+    _ensure_user_referral_code(db, user)
     
     # Atualiza último login
     user.last_login = datetime.now(UTC)
@@ -453,6 +479,8 @@ def refresh_token(data: RefreshRequest, db: Session = Depends(get_db)):
     user = db.get(AppUser, session.user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Usuário não encontrado ou inativo")
+
+    _ensure_user_referral_code(db, user)
     
     # Invalida sessão antiga
     session.is_active = False
@@ -543,8 +571,9 @@ def referral_open(request: Request, data: ReferralOpenIn):
 # =============================================================================
 
 @router.get("/me", response_model=AppUserProfile)
-def get_profile(current_user: AppUser = Depends(get_current_app_user)):
+def get_profile(db: Session = Depends(get_db), current_user: AppUser = Depends(get_current_app_user)):
     """Obtém perfil do usuário atual."""
+    _ensure_user_referral_code(db, current_user)
     return AppUserProfile.model_validate(current_user)
 
 

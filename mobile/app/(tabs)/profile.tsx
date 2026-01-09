@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
-import { useAuth } from '@/lib/auth';
+import { AppUser, useAuth } from '@/lib/auth';
 import { getPushPermissionInfo, registerForPushNotificationsAsync, requestPushPermissions } from '@/lib/notifications';
 import { apiGet } from '@/lib/api';
 import { useRouter } from 'expo-router';
@@ -17,7 +17,7 @@ type UfOut = { uf: string };
 type CityOut = { city: string };
 
 export default function ProfileScreen() {
-  const { user, signOut, updateProfile, isLoading } = useAuth();
+  const { user, tokens, refreshAccessToken, signOut, updateProfile, isLoading } = useAuth();
   const router = useRouter();
   const theme = useTheme();
   const { mode: themeMode, setMode: setThemeMode } = useThemeMode();
@@ -210,7 +210,18 @@ export default function ProfileScreen() {
 
   async function handleInvite() {
     try {
-      const code = (user?.referral_code ?? '').trim();
+      let code = (user?.referral_code ?? '').trim();
+      if (!code && tokens?.access_token) {
+        try {
+          const me = await apiGet<AppUser>('/app/me', undefined, {
+            token: tokens.access_token,
+            onRefreshToken: refreshAccessToken,
+          });
+          code = (me?.referral_code ?? '').trim();
+        } catch {
+          
+        }
+      }
       const deepLink = code
         ? `mobile://signup?referral_code=${encodeURIComponent(code)}`
         : 'mobile://signup';
