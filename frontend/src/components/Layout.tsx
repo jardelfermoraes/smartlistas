@@ -72,7 +72,7 @@ export function Layout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 md:flex">
+    <div className="min-h-screen bg-gray-50 md:flex md:gap-6">
       {/* Mobile menu button */}
       <div className="md:hidden fixed top-4 left-4 z-50">
         <button
