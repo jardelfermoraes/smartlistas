@@ -89,7 +89,10 @@ export function Layout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="h-16 border-b border-gray-200/60 flex items-center px-6">
+        <div
+          className="h-16 border-b border-gray-200/60 flex items-center"
+          style={{ paddingLeft: '40px', paddingRight: '16px' }}
+        >
           <div className="flex items-center" style={{ gap: '18px' }}>
             <div className="w-9 h-9 rounded-xl bg-green-600 flex items-center justify-center text-white font-bold">
               S
@@ -103,8 +106,8 @@ export function Layout() {
         <nav
           className="flex-1 mt-4 overflow-y-auto"
           style={{ paddingLeft: '40px', paddingRight: '16px' }}
-          data-layout-build="2026-01-09-19-40"
-          title="layout-build=2026-01-09-19-40"
+          data-layout-build="2026-01-09-19-57"
+          title="layout-build=2026-01-09-19-57"
         >
           {navSections.map((section, sectionIdx) => (
             <div
