@@ -100,7 +100,12 @@ export function Layout() {
             </div>
           </div>
         </div>
-        <nav className="flex-1 mt-4 pl-6 pr-3 overflow-y-auto">
+        <nav
+          className="flex-1 mt-4 overflow-y-auto"
+          style={{ paddingLeft: '40px', paddingRight: '16px' }}
+          data-layout-build="2026-01-09-19-40"
+          title="layout-build=2026-01-09-19-40"
+        >
           {navSections.map((section, sectionIdx) => (
             <div
               key={section.title}
