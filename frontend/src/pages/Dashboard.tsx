@@ -9,8 +9,6 @@ import {
   Package,
   LucideIcon,
   ChevronRight,
-  Smartphone,
-  Users,
   UserPlus,
   ShoppingCart,
   CreditCard
@@ -607,34 +605,6 @@ function StatusIndicator({ label, sublabel, online, variant = 'default' }: Statu
 // ============================================
 // COMPONENTE: QuickAction (botão de ação rápida)
 // ============================================
-interface QuickActionProps {
-  to: string;
-  icon: LucideIcon;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  sublabel: string;
-}
-
-function QuickAction({ to, icon: Icon, iconBg, iconColor, label, sublabel }: QuickActionProps) {
-  return (
-    <Link 
-      to={to} 
-      className="flex flex-col items-center rounded-xl hover:bg-gray-50 transition-colors border border-gray-100"
-      style={{ padding: '20px 16px' }}
-    >
-      <div 
-        className={`${iconBg} rounded-full flex items-center justify-center`}
-        style={{ width: '44px', height: '44px', marginBottom: '12px' }}
-      >
-        <Icon size={20} className={iconColor} />
-      </div>
-      <span className="text-sm font-medium text-gray-900">{label}</span>
-      <span className="text-xs text-gray-500" style={{ marginTop: '2px' }}>{sublabel}</span>
-    </Link>
-  );
-}
-
 export function Dashboard() {
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['dashboard'],
@@ -756,44 +726,6 @@ export function Dashboard() {
 
           <Card title="Faturamento" action={<CreditCard size={18} className="text-gray-400" />}>
             <RevenueChart fetcher={(days) => statsApi.getRevenueChart(days)} />
-          </Card>
-
-          {/* Quick Actions */}
-          <Card title="Ações Rápidas">
-            <div className="grid grid-cols-2 gap-4">
-              <QuickAction
-                to="/receipts"
-                icon={Receipt}
-                iconBg="bg-orange-100"
-                iconColor="text-orange-600"
-                label="Cupons"
-                sublabel="Importar e revisar"
-              />
-              <QuickAction
-                to="/stores"
-                icon={Store}
-                iconBg="bg-blue-100"
-                iconColor="text-blue-600"
-                label="Lojas"
-                sublabel="Gerenciar"
-              />
-              <QuickAction
-                to="/app-receipt-keys"
-                icon={Smartphone}
-                iconBg="bg-green-100"
-                iconColor="text-green-600"
-                label="Chaves"
-                sublabel="Triagem do app"
-              />
-              <QuickAction
-                to="/app-users"
-                icon={Users}
-                iconBg="bg-purple-100"
-                iconColor="text-purple-600"
-                label="Usuários"
-                sublabel="App"
-              />
-            </div>
           </Card>
         </div>
 
