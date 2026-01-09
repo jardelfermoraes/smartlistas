@@ -120,7 +120,7 @@ export function Layout() {
                     key={item.path}
                     to={item.path}
                     onClick={() => setSidebarOpen(false)}
-                    className={`group flex items-center gap-3 px-4 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
+                    className={`group flex items-center gap-2 pl-5 pr-4 py-2.5 mb-1 rounded-lg text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-green-50 text-green-800'
                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
