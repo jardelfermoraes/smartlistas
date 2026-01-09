@@ -8,6 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { useAuth } from '@/lib/auth';
+import { storage } from '@/lib/storage';
 import { useTheme } from '@/lib/theme';
 
 export default function SignupScreen() {
@@ -16,12 +17,7 @@ export default function SignupScreen() {
   const theme = useTheme();
   const { isLoading, isAuthenticated, signUpWithEmail } = useAuth();
 
-  const referralCode = (() => {
-    const raw = params.referral_code ?? params.ref;
-    const v = Array.isArray(raw) ? raw[0] : raw;
-    const code = (v ?? '').trim();
-    return code ? code.toUpperCase() : null;
-  })();
+  const [referralCode, setReferralCode] = useState<string | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -31,6 +27,31 @@ export default function SignupScreen() {
   const [gender, setGender] = useState<string>('');
   const [selectingGender, setSelectingGender] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const REFERRAL_KEY = 'smartlistas.signup.referral_code.v1';
+    let cancelled = false;
+
+    (async () => {
+      const raw = params.referral_code ?? params.ref;
+      const v = Array.isArray(raw) ? raw[0] : raw;
+      const code = (v ?? '').trim().toUpperCase();
+
+      if (code) {
+        await storage.setItem(REFERRAL_KEY, code);
+        if (!cancelled) setReferralCode(code);
+        return;
+      }
+
+      const saved = await storage.getItem(REFERRAL_KEY);
+      const savedCode = (saved ?? '').trim().toUpperCase();
+      if (!cancelled) setReferralCode(savedCode || null);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [params.referral_code, params.ref]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -253,6 +274,7 @@ export default function SignupScreen() {
                 gender: gender || null,
                 referral_code: referralCode,
               });
+              await storage.removeItem('smartlistas.signup.referral_code.v1');
               router.replace('/(tabs)');
             } catch (e) {
               const message = e instanceof Error ? e.message : 'Erro ao criar conta';
