@@ -388,7 +388,7 @@ export interface DashboardStats {
   precos_ultimos_30_dias: number;
 }
 
-export interface ChartDataPoint {
+export interface DashboardChartDataPoint {
   label: string;
   value: number;
 }
@@ -410,14 +410,14 @@ export interface Alert {
 
 export interface DashboardData {
   stats: DashboardStats;
-  cupons_por_dia: ChartDataPoint[];
-  precos_por_dia: ChartDataPoint[];
-  produtos_por_categoria: ChartDataPoint[];
+  cupons_por_dia: DashboardChartDataPoint[];
+  precos_por_dia: DashboardChartDataPoint[];
+  produtos_por_categoria: DashboardChartDataPoint[];
   atividade_recente: RecentActivity[];
   alertas: Alert[];
 }
 
-export interface ChartDataPoint {
+export interface CuponsChartDataPoint {
   label: string;
   date: string;
   cupons: number;
@@ -425,7 +425,7 @@ export interface ChartDataPoint {
 }
 
 export interface ChartResponse {
-  data: ChartDataPoint[];
+  data: CuponsChartDataPoint[];
   totals: { cupons: number; produtos: number };
   medias: { cupons: number; produtos: number };
   max: { cupons: number; produtos: number };
@@ -444,6 +444,38 @@ export interface SingleSeriesChartResponse {
   medias: { value: number };
   max: { value: number };
   days: number;
+}
+
+export interface MoneySeriesPoint {
+  label: string;
+  date: string;
+  value: number;
+}
+
+export interface MoneySeriesChartResponse {
+  data: MoneySeriesPoint[];
+  totals: { value: number };
+  medias: { value: number };
+  max: { value: number };
+  days: number;
+}
+
+export interface AppPurchaseKpisResponse {
+  purchases_count: number;
+  purchases_with_optimization_count: number;
+  optimization_rate_percent: number;
+
+  savings_total: number;
+  savings_avg_per_purchase: number;
+  savings_percent_avg: number;
+
+  baseline_total_sum: number;
+  optimized_total_sum: number;
+  ticket_avg_baseline: number;
+  ticket_avg_optimized: number;
+
+  items_total_avg: number;
+  items_checked_avg: number;
 }
 
 export interface RevenueSeriesPoint {
@@ -468,8 +500,18 @@ export const statsApi = {
   getCuponsChart: (days: number = 7) => api.get<ChartResponse>('/stats/chart/cupons', { params: { days } }),
   getAppUsersChart: (days: number = 30) =>
     api.get<SingleSeriesChartResponse>('/stats/chart/app-users', { params: { days } }),
-  getAppPurchasesChart: (days: number = 30) =>
-    api.get<SingleSeriesChartResponse>('/stats/chart/app-purchases', { params: { days } }),
+  getAppPurchasesChart: (
+    days: number = 30,
+    params?: { status_final?: string; has_optimization?: boolean | null }
+  ) => api.get<SingleSeriesChartResponse>('/stats/chart/app-purchases', { params: { days, ...(params ?? {}) } }),
+  getAppSavingsChart: (
+    days: number = 30,
+    params?: { status_final?: string; has_optimization?: boolean | null }
+  ) => api.get<MoneySeriesChartResponse>('/stats/chart/app-savings', { params: { days, ...(params ?? {}) } }),
+  getAppPurchasesKpis: (
+    days: number = 30,
+    params?: { status_final?: string; has_optimization?: boolean | null }
+  ) => api.get<AppPurchaseKpisResponse>('/stats/kpis/app-purchases', { params: { days, ...(params ?? {}) } }),
   getRevenueChart: (days: number = 30) => api.get<RevenueChartResponse>('/stats/chart/revenue', { params: { days } }),
 };
 

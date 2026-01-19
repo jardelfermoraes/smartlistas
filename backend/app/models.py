@@ -440,6 +440,26 @@ class AppPurchase(Base):
     receipt_qr_raw = Column(Text, nullable=True)
     receipt_chave_acesso = Column(String(44), nullable=True, index=True)
 
+    # Métricas/snapshot para analytics
+    items_total = Column(Integer, nullable=True)
+    items_checked = Column(Integer, nullable=True)
+    has_optimization = Column(Boolean, nullable=True)
+    max_stores = Column(Integer, nullable=True)
+    stores_count = Column(Integer, nullable=True)
+    optimized_total = Column(Float, nullable=True)
+    baseline_total = Column(Float, nullable=True)
+    savings_amount = Column(Float, nullable=True)
+    savings_percent = Column(Float, nullable=True)
+
+    # Metadados do cliente (analytics/debug)
+    client_platform = Column(String(20), nullable=True)
+    client_app_version = Column(String(50), nullable=True)
+    client_os_version = Column(String(50), nullable=True)
+    client_device_model = Column(String(100), nullable=True)
+    client_locale = Column(String(30), nullable=True)
+    client_time_zone = Column(String(60), nullable=True)
+    client_timezone_offset_min = Column(Integer, nullable=True)
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), default=utc_now)
 

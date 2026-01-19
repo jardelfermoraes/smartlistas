@@ -7,6 +7,7 @@ import {
   Receipt, 
   Bell,
   CreditCard,
+  BarChart3,
   Menu,
   X,
   LogOut,
@@ -46,6 +47,7 @@ const navSections: NavSection[] = [
       { path: '/app-receipt-keys', label: 'Chaves do App', icon: Smartphone },
       { path: '/app-users', label: 'Usuários App', icon: Users, requiresPermission: 'users.view' },
       { path: '/app-payments', label: 'Pagamentos App', icon: CreditCard },
+      { path: '/kpis-compras', label: 'KPIs Compras', icon: BarChart3 },
     ],
   },
   {

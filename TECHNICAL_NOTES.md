@@ -1,5 +1,7 @@
 # SmartListas – Notas Técnicas (Arquitetura, Deploy, Variáveis, Troubleshooting)
 
+Este é o arquivo canônico de informações técnicas do SmartListas (arquitetura, deploy e troubleshooting).
+
 ## Visão geral
 - **Repo:** `jardelfermoraes/smartlistas`
 - **Componentes:**
@@ -31,6 +33,13 @@
 ### Variáveis de ambiente
 - `VITE_API_URL` (recomendado setar na Vercel): `https://api.smartlistas.com.br`
 - Fallback do código: em `*.smartlistas.com.br`, o frontend usa automaticamente `https://api.smartlistas.com.br`.
+
+### Deploy (Admin/Cadastro)
+- O deploy do frontend é feito via **Vercel**. Em geral:
+  - push/merge na branch monitorada (ex.: `main`) dispara redeploy
+  - ou usar **Redeploy** no painel da Vercel
+- Para rotas SPA (ex.: `/kpis-compras`), o rewrite está em:
+  - `frontend/vercel.json`
 
 ## Mobile (Expo)
 ### EAS
@@ -73,6 +82,19 @@
 - `AppUser` (`backend/app/models.py`) já contém:
   - `referral_code`
   - `referred_by_user_id`
+
+### Migrations
+- Criar migration (local):
+  - `alembic revision --autogenerate -m "descrição"`
+- Aplicar migrations:
+  - `alembic upgrade head`
+
+### KPIs/Stats (Admin)
+- Dashboard/Admin consome endpoints em `backend/app/routers/stats.py`.
+- Endpoints relevantes:
+  - `GET /stats/chart/app-purchases`
+  - `GET /stats/chart/app-savings`
+  - `GET /stats/kpis/app-purchases`
 
 ## Troubleshooting
 

@@ -85,6 +85,9 @@ export async function loadShoppingLists(): Promise<ShoppingListDraft[]> {
 
       const checked = items.filter((it) => Boolean((it as any).is_checked)).length;
       let status = (l.status as ShoppingListStatus) ?? 'draft';
+      if (items.length > 0 && checked === items.length) {
+        status = 'completed';
+      }
       if (status === 'in_progress' && checked === 0) {
         status = optimization?.allocations?.length ? 'optimized' : 'draft';
       }

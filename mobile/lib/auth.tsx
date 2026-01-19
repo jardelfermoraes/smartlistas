@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 
 import { apiPost, apiPut } from '@/lib/api';
 import { registerForPushNotificationsAsync } from '@/lib/notifications';
+import { flushPendingPurchases } from '@/lib/purchaseQueue';
 import { storage } from '@/lib/storage';
 
 export type AppUser = {
@@ -63,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
   const pushSyncInFlightRef = useRef<Promise<void> | null>(null);
+  const purchaseFlushInFlightRef = useRef<Promise<void> | null>(null);
 
   function clearSession() {
     setTokens(null);
@@ -70,6 +72,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void storage.removeItem(TOKENS_KEY);
     void storage.removeItem(USER_KEY);
   }
+
+  const refreshAccessTokenImpl = async (): Promise<string | null> => {
+    if (!tokens?.refresh_token) return null;
+    if (refreshInFlightRef.current) return await refreshInFlightRef.current;
+
+    refreshInFlightRef.current = (async () => {
+      try {
+        const data = await apiPost<LoginResponse>('/app/refresh', {
+          refresh_token: tokens.refresh_token,
+        });
+        const nextTokens: AuthTokens = {
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          token_type: data.token_type,
+        };
+        setTokens(nextTokens);
+        setUser(data.user);
+        await storage.setItem(TOKENS_KEY, JSON.stringify(nextTokens));
+        await storage.setItem(USER_KEY, JSON.stringify(data.user));
+        return nextTokens.access_token;
+      } catch {
+        clearSession();
+        return null;
+      } finally {
+        refreshInFlightRef.current = null;
+      }
+    })();
+
+    return await refreshInFlightRef.current;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -142,37 +174,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [tokens?.access_token, user?.id]);
 
-  const value = useMemo<AuthContextValue>(() => {
-    const refreshAccessTokenImpl = async (): Promise<string | null> => {
-      if (!tokens?.refresh_token) return null;
-      if (refreshInFlightRef.current) return await refreshInFlightRef.current;
+  useEffect(() => {
+    let cancelled = false;
+    if (!tokens?.access_token || !user?.id) return;
+    const token = tokens.access_token;
 
-      refreshInFlightRef.current = (async () => {
+    const tryFlush = () => {
+      if (purchaseFlushInFlightRef.current) return;
+      purchaseFlushInFlightRef.current = (async () => {
         try {
-          const data = await apiPost<LoginResponse>('/app/refresh', {
-            refresh_token: tokens.refresh_token,
-          });
-          const nextTokens: AuthTokens = {
-            access_token: data.access_token,
-            refresh_token: data.refresh_token,
-            token_type: data.token_type,
-          };
-          setTokens(nextTokens);
-          setUser(data.user);
-          await storage.setItem(TOKENS_KEY, JSON.stringify(nextTokens));
-          await storage.setItem(USER_KEY, JSON.stringify(data.user));
-          return nextTokens.access_token;
+          await flushPendingPurchases(token, refreshAccessTokenImpl);
         } catch {
-          clearSession();
-          return null;
         } finally {
-          refreshInFlightRef.current = null;
+          if (!cancelled) purchaseFlushInFlightRef.current = null;
         }
       })();
-
-      return await refreshInFlightRef.current;
     };
 
+    // Tenta imediatamente e depois periodicamente enquanto autenticado.
+    tryFlush();
+    const interval = setInterval(tryFlush, 60_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [tokens?.access_token, user?.id]);
+
+  const value = useMemo<AuthContextValue>(() => {
     return {
       isLoading,
       isAuthenticated: Boolean(tokens?.access_token),
@@ -244,7 +273,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearSession();
       },
     };
-  }, [isLoading, tokens, user]);
+  }, [isLoading, refreshAccessTokenImpl, tokens, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -111,6 +111,16 @@ class CategoryCountOut(BaseModel):
     total: int
 
 
+class CanonicalIdsIn(BaseModel):
+    ids: List[int]
+
+
+class CanonicalCategoryOut(BaseModel):
+    id: int
+    categoria: Optional[str] = None
+    subcategoria: Optional[str] = None
+
+
 class TopInsertedOut(BaseModel):
     canonical_id: int
     nome: str
@@ -216,6 +226,25 @@ def list_categories(request: Request, db: DbSession):
         CanonicalProduct.categoria.isnot(None)
     ).distinct().all()
     return [c[0] for c in categories if c[0]]
+
+
+@router.post("/categories/by-ids", response_model=List[CanonicalCategoryOut])
+@limiter.limit("60/minute")
+def get_categories_by_ids(request: Request, db: DbSession, data: CanonicalIdsIn):
+    ids = [int(x) for x in (data.ids or []) if isinstance(x, (int, float, str)) and str(x).strip().isdigit()]
+    if not ids:
+        return []
+
+    rows = (
+        db.query(CanonicalProduct.id, CanonicalProduct.categoria, CanonicalProduct.subcategoria)
+        .filter(CanonicalProduct.id.in_(ids))
+        .all()
+    )
+    by_id = {int(r[0]): (r[1], r[2]) for r in rows}
+    return [
+        CanonicalCategoryOut(id=int(cid), categoria=by_id.get(int(cid), (None, None))[0], subcategoria=by_id.get(int(cid), (None, None))[1])
+        for cid in ids
+    ]
 
 
 @router.get("/kpis", response_model=CanonicalKpisOut)

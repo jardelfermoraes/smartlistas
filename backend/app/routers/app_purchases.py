@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
@@ -30,6 +30,26 @@ class PurchaseCreateIn(BaseModel):
     list_name: Optional[str] = Field(default=None, max_length=120)
     status_final: str = Field(default="completed", max_length=20)
     finished_at: Optional[datetime] = None
+
+    # Métricas/snapshot para analytics
+    items_total: Optional[int] = Field(default=None, ge=0)
+    items_checked: Optional[int] = Field(default=None, ge=0)
+    has_optimization: Optional[bool] = None
+    max_stores: Optional[int] = Field(default=None, ge=1, le=5)
+    stores_count: Optional[int] = Field(default=None, ge=0)
+    optimized_total: Optional[float] = Field(default=None, ge=0)
+    baseline_total: Optional[float] = Field(default=None, ge=0)
+    savings_amount: Optional[float] = Field(default=None, ge=0)
+    savings_percent: Optional[float] = Field(default=None, ge=0)
+
+    # Metadados do cliente (analytics/debug)
+    client_platform: Optional[str] = Field(default=None, max_length=20)
+    client_app_version: Optional[str] = Field(default=None, max_length=50)
+    client_os_version: Optional[str] = Field(default=None, max_length=50)
+    client_device_model: Optional[str] = Field(default=None, max_length=100)
+    client_locale: Optional[str] = Field(default=None, max_length=30)
+    client_time_zone: Optional[str] = Field(default=None, max_length=60)
+    client_timezone_offset_min: Optional[int] = None
 
     receipt_qr_raw: Optional[str] = None
 
@@ -97,11 +117,23 @@ def list_purchases(
 @router.post("/purchases", response_model=PurchaseCreateOut, status_code=status.HTTP_201_CREATED)
 def create_purchase(
     data: PurchaseCreateIn,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: AppUser = Depends(get_current_app_user),
 ):
     if not data.items:
         raise HTTPException(status_code=400, detail="Informe ao menos 1 item")
+
+    # Idempotência: se já existe compra para (user_id, local_list_id), retorna a existente
+    if data.local_list_id:
+        existing = (
+            db.query(AppPurchase)
+            .filter(AppPurchase.user_id == current_user.id, AppPurchase.local_list_id == data.local_list_id)
+            .first()
+        )
+        if existing:
+            response.status_code = status.HTTP_200_OK
+            return PurchaseCreateOut(id=existing.id, receipt_chave_acesso=existing.receipt_chave_acesso)
 
     chave = extract_chave_from_text(data.receipt_qr_raw) if data.receipt_qr_raw else None
 
@@ -113,6 +145,22 @@ def create_purchase(
         finished_at=data.finished_at or datetime.now(UTC),
         receipt_qr_raw=data.receipt_qr_raw,
         receipt_chave_acesso=chave,
+        items_total=data.items_total if data.items_total is not None else len(data.items),
+        items_checked=data.items_checked,
+        has_optimization=data.has_optimization,
+        max_stores=data.max_stores,
+        stores_count=data.stores_count,
+        optimized_total=data.optimized_total,
+        baseline_total=data.baseline_total,
+        savings_amount=data.savings_amount,
+        savings_percent=data.savings_percent,
+        client_platform=data.client_platform,
+        client_app_version=data.client_app_version,
+        client_os_version=data.client_os_version,
+        client_device_model=data.client_device_model,
+        client_locale=data.client_locale,
+        client_time_zone=data.client_time_zone,
+        client_timezone_offset_min=data.client_timezone_offset_min,
     )
 
     db.add(purchase)

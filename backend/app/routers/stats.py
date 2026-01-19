@@ -94,6 +94,38 @@ class SingleSeriesChartResponse(BaseModel):
     days: int
 
 
+class MoneySeriesPoint(BaseModel):
+    label: str
+    date: str
+    value: float
+
+
+class MoneySeriesChartResponse(BaseModel):
+    data: List[MoneySeriesPoint]
+    totals: dict
+    medias: dict
+    max: dict
+    days: int
+
+
+class AppPurchaseKpisResponse(BaseModel):
+    purchases_count: int
+    purchases_with_optimization_count: int
+    optimization_rate_percent: float
+
+    savings_total: float
+    savings_avg_per_purchase: float
+    savings_percent_avg: float
+
+    baseline_total_sum: float
+    optimized_total_sum: float
+    ticket_avg_baseline: float
+    ticket_avg_optimized: float
+
+    items_total_avg: float
+    items_checked_avg: float
+
+
 class RevenueSeriesPoint(BaseModel):
     label: str
     date: str
@@ -402,9 +434,149 @@ def get_app_users_chart(request: Request, db: DbSession, days: int = 30):
     )
 
 
+@router.get("/kpis/app-purchases", response_model=AppPurchaseKpisResponse)
+@limiter.limit("60/minute")
+def get_app_purchases_kpis(
+    request: Request,
+    db: DbSession,
+    days: int = 30,
+    status_final: str = "completed",
+    has_optimization: Optional[bool] = None,
+):
+    days = max(7, min(365, days))
+
+    now = datetime.now(UTC)
+    start_dt = now - timedelta(days=days)
+
+    q = db.query(AppPurchase).filter(
+        AppPurchase.finished_at >= start_dt,
+        AppPurchase.finished_at <= now,
+        AppPurchase.status_final == status_final,
+    )
+
+    if has_optimization is not None:
+        q = q.filter(AppPurchase.has_optimization == has_optimization)
+
+    purchases_count = int(q.count())
+
+    q_opt = q
+    purchases_with_optimization_count = int(q_opt.filter(AppPurchase.has_optimization == True).count())
+
+    sums = q.with_entities(
+        func.coalesce(func.sum(AppPurchase.savings_amount), 0.0).label("savings_total"),
+        func.coalesce(func.sum(AppPurchase.baseline_total), 0.0).label("baseline_total_sum"),
+        func.coalesce(func.sum(AppPurchase.optimized_total), 0.0).label("optimized_total_sum"),
+    ).first()
+
+    avgs = q.with_entities(
+        func.coalesce(func.avg(AppPurchase.savings_amount), 0.0).label("savings_avg"),
+        func.coalesce(func.avg(AppPurchase.savings_percent), 0.0).label("savings_percent_avg"),
+        func.coalesce(func.avg(AppPurchase.baseline_total), 0.0).label("ticket_avg_baseline"),
+        func.coalesce(func.avg(AppPurchase.optimized_total), 0.0).label("ticket_avg_optimized"),
+        func.coalesce(func.avg(AppPurchase.items_total), 0.0).label("items_total_avg"),
+        func.coalesce(func.avg(AppPurchase.items_checked), 0.0).label("items_checked_avg"),
+    ).first()
+
+    savings_total = float(getattr(sums, "savings_total", 0.0) or 0.0)
+    baseline_total_sum = float(getattr(sums, "baseline_total_sum", 0.0) or 0.0)
+    optimized_total_sum = float(getattr(sums, "optimized_total_sum", 0.0) or 0.0)
+
+    savings_avg = float(getattr(avgs, "savings_avg", 0.0) or 0.0)
+    savings_percent_avg = float(getattr(avgs, "savings_percent_avg", 0.0) or 0.0)
+    ticket_avg_baseline = float(getattr(avgs, "ticket_avg_baseline", 0.0) or 0.0)
+    ticket_avg_optimized = float(getattr(avgs, "ticket_avg_optimized", 0.0) or 0.0)
+    items_total_avg = float(getattr(avgs, "items_total_avg", 0.0) or 0.0)
+    items_checked_avg = float(getattr(avgs, "items_checked_avg", 0.0) or 0.0)
+
+    optimization_rate_percent = (
+        (purchases_with_optimization_count / purchases_count) * 100.0 if purchases_count else 0.0
+    )
+
+    return AppPurchaseKpisResponse(
+        purchases_count=purchases_count,
+        purchases_with_optimization_count=purchases_with_optimization_count,
+        optimization_rate_percent=round(optimization_rate_percent, 1),
+        savings_total=round(savings_total, 2),
+        savings_avg_per_purchase=round(savings_avg, 2),
+        savings_percent_avg=round(savings_percent_avg, 2),
+        baseline_total_sum=round(baseline_total_sum, 2),
+        optimized_total_sum=round(optimized_total_sum, 2),
+        ticket_avg_baseline=round(ticket_avg_baseline, 2),
+        ticket_avg_optimized=round(ticket_avg_optimized, 2),
+        items_total_avg=round(items_total_avg, 2),
+        items_checked_avg=round(items_checked_avg, 2),
+    )
+
+
+@router.get("/chart/app-savings", response_model=MoneySeriesChartResponse)
+@limiter.limit("60/minute")
+def get_app_savings_chart(
+    request: Request,
+    db: DbSession,
+    days: int = 30,
+    status_final: str = "completed",
+    has_optimization: Optional[bool] = None,
+):
+    days = max(7, min(90, days))
+
+    now = datetime.now(UTC)
+    data: list[MoneySeriesPoint] = []
+
+    for i in range(days - 1, -1, -1):
+        dia = now - timedelta(days=i)
+        dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
+        dia_fim = dia_inicio + timedelta(days=1)
+
+        q = db.query(func.coalesce(func.sum(AppPurchase.savings_amount), 0.0)).filter(
+            AppPurchase.finished_at >= dia_inicio,
+            AppPurchase.finished_at < dia_fim,
+            AppPurchase.status_final == status_final,
+        )
+
+        if has_optimization is not None:
+            q = q.filter(AppPurchase.has_optimization == has_optimization)
+
+        savings = (
+            q
+            .scalar()
+        )
+
+        try:
+            savings_f = float(savings or 0.0)
+        except Exception:
+            savings_f = 0.0
+
+        data.append(
+            MoneySeriesPoint(
+                label=dia.strftime("%d/%m"),
+                date=dia.strftime("%Y-%m-%d"),
+                value=round(savings_f, 2),
+            )
+        )
+
+    total = round(sum(p.value for p in data), 2)
+    max_value = max((p.value for p in data), default=0.0)
+    days_with_value = sum(1 for p in data if p.value > 0)
+    avg = total / days_with_value if days_with_value else 0.0
+
+    return MoneySeriesChartResponse(
+        data=data,
+        totals={"value": total},
+        medias={"value": round(avg, 2)},
+        max={"value": round(max_value, 2)},
+        days=days,
+    )
+
+
 @router.get("/chart/app-purchases", response_model=SingleSeriesChartResponse)
 @limiter.limit("60/minute")
-def get_app_purchases_chart(request: Request, db: DbSession, days: int = 30):
+def get_app_purchases_chart(
+    request: Request,
+    db: DbSession,
+    days: int = 30,
+    status_final: str = "completed",
+    has_optimization: Optional[bool] = None,
+):
     days = max(7, min(90, days))
 
     now = datetime.now(UTC)
@@ -415,15 +587,16 @@ def get_app_purchases_chart(request: Request, db: DbSession, days: int = 30):
         dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
         dia_fim = dia_inicio + timedelta(days=1)
 
-        count = (
-            db.query(AppPurchase)
-            .filter(
-                AppPurchase.finished_at >= dia_inicio,
-                AppPurchase.finished_at < dia_fim,
-                AppPurchase.status_final == "completed",
-            )
-            .count()
+        q = db.query(AppPurchase).filter(
+            AppPurchase.finished_at >= dia_inicio,
+            AppPurchase.finished_at < dia_fim,
+            AppPurchase.status_final == status_final,
         )
+
+        if has_optimization is not None:
+            q = q.filter(AppPurchase.has_optimization == has_optimization)
+
+        count = q.count()
 
         data.append(
             SingleSeriesPoint(

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Screen } from '@/components/ui/Screen';
 import { apiGet, apiPost } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { enqueuePendingPurchase, getClientPurchaseMeta } from '@/lib/purchaseQueue';
 import {
   getShoppingListById,
   ShoppingListDraft,
@@ -34,6 +35,12 @@ type CanonicalListResponse = {
   page: number;
   page_size: number;
   pages: number;
+};
+
+type CanonicalCategoryOut = {
+  id: number;
+  categoria?: string | null;
+  subcategoria?: string | null;
 };
 
 function formatCurrencyBRL(value: number): string {
@@ -167,6 +174,7 @@ function statusLabel(status: ShoppingListStatus): string {
 }
 
 function computeListStatus(base: ShoppingListStatus, items: ShoppingListDraft['items']): ShoppingListStatus {
+  if (base === 'completed' || base === 'closed') return base;
   if (!items.length) return base;
   const checked = items.filter((it) => Boolean(it.is_checked)).length;
   if (checked === 0) return base;
@@ -190,6 +198,11 @@ export default function ListDetailScreen() {
   const [optimization, setOptimization] = useState<ShoppingListOptimizationResult | null>(null);
   const [maxStores, setMaxStores] = useState(3);
 
+  const [categoryByCanonicalId, setCategoryByCanonicalId] = useState<
+    Record<number, { categoria?: string | null; subcategoria?: string | null }>
+  >({});
+  const [expandedCategoryKeys, setExpandedCategoryKeys] = useState<Record<string, boolean>>({});
+
   const [query, setQuery] = useState('');
   const [qty, setQty] = useState('1');
   const [suggestions, setSuggestions] = useState<CanonicalProduct[]>([]);
@@ -208,9 +221,82 @@ export default function ListDetailScreen() {
   const didAutoOptimizeRef = useRef(false);
   const createdAtRef = useRef<string>(new Date().toISOString());
   const optimizationSigRef = useRef<string | null>(null);
+  const categorySigRef = useRef<string | null>(null);
 
   const [editVisible, setEditVisible] = useState(false);
   const [expandedStoreIds, setExpandedStoreIds] = useState<Record<string, boolean>>({});
+
+  const checkedByCanonicalId = useMemo(() => {
+    const map: Record<number, boolean> = {};
+    for (const it of draftItems) {
+      map[it.canonical_id] = Boolean(it.is_checked);
+    }
+    return map;
+  }, [draftItems]);
+
+  function categoryLabelFor(canonicalId: number): string {
+    const raw = categoryByCanonicalId[canonicalId]?.categoria;
+    const cat = (raw ?? '').trim();
+    return cat || 'Sem categoria';
+  }
+
+  function isExpanded(key: string): boolean {
+    return Boolean(expandedCategoryKeys[key]);
+  }
+
+  function toggleExpanded(key: string) {
+    setExpandedCategoryKeys((prev) => ({ ...prev, [key]: !isExpanded(key) }));
+  }
+
+  const draftCategoryRows = useMemo(() => {
+    type Row =
+      | {
+          type: 'header';
+          key: string;
+          category: string;
+          total: number;
+          checked: number;
+        }
+      | {
+          type: 'item';
+          key: string;
+          item: ShoppingListDraft['items'][number];
+        };
+
+    if (!draftItems.length) return [] as Row[];
+
+    const groups = new Map<string, ShoppingListDraft['items']>();
+    for (const it of draftItems) {
+      const cat = categoryLabelFor(it.canonical_id);
+      const list = groups.get(cat) ?? [];
+      list.push(it);
+      groups.set(cat, list);
+    }
+
+    const cats = Array.from(groups.keys()).sort((a, b) => {
+      if (a === 'Sem categoria' && b !== 'Sem categoria') return 1;
+      if (b === 'Sem categoria' && a !== 'Sem categoria') return -1;
+      return a.localeCompare(b, 'pt-BR');
+    });
+
+    const rows: Row[] = [];
+    for (const cat of cats) {
+      const items = (groups.get(cat) ?? [])
+        .slice()
+        .sort((a, b) => (a.product_name ?? '').localeCompare(b.product_name ?? '', 'pt-BR'));
+      const headerKey = `draft|cat:${cat}`;
+      const total = items.length;
+      const checked = items.filter((it) => Boolean(it.is_checked)).length;
+      rows.push({ type: 'header', key: headerKey, category: cat, total, checked });
+      if (isExpanded(headerKey)) {
+        for (const it of items) {
+          rows.push({ type: 'item', key: `draft|item:${it.canonical_id}`, item: it });
+        }
+      }
+    }
+
+    return rows;
+  }, [draftItems, categoryByCanonicalId, expandedCategoryKeys]);
 
   const totalUnits = useMemo(
     () => draftItems.reduce((acc, it) => acc + (Number.isFinite(it.quantity) ? it.quantity : 0), 0),
@@ -322,6 +408,67 @@ export default function ListDetailScreen() {
       }
     })();
   }, [listId]);
+
+  useEffect(() => {
+    const ids = Array.from(
+      new Set(
+        (draftItems ?? [])
+          .map((it) => Number(it.canonical_id))
+          .filter((x) => Number.isFinite(x) && x > 0)
+      )
+    ).sort((a, b) => a - b);
+
+    if (!ids.length) return;
+    const sig = ids.join(',');
+    if (categorySigRef.current === sig) return;
+    categorySigRef.current = sig;
+
+    void (async () => {
+      try {
+        const res = await apiPost<CanonicalCategoryOut[]>('/canonical/categories/by-ids', { ids });
+        const next: Record<number, { categoria?: string | null; subcategoria?: string | null }> = {};
+        for (const r of res ?? []) {
+          const cid = Number((r as any)?.id);
+          if (!Number.isFinite(cid)) continue;
+          next[cid] = {
+            categoria: (r as any)?.categoria ?? null,
+            subcategoria: (r as any)?.subcategoria ?? null,
+          };
+        }
+        setCategoryByCanonicalId((prev) => ({ ...prev, ...next }));
+      } catch {
+        try {
+          const missing = ids.filter((cid) => categoryByCanonicalId[cid] === undefined);
+          if (!missing.length) return;
+
+          const next: Record<number, { categoria?: string | null; subcategoria?: string | null }> = {};
+          const batchSize = 10;
+
+          for (let i = 0; i < missing.length; i += batchSize) {
+            const chunk = missing.slice(i, i + batchSize);
+            const chunkRes = await Promise.all(
+              chunk.map((cid) => apiGet<CanonicalProduct>(`/canonical/${cid}`).catch(() => null))
+            );
+            for (let j = 0; j < chunk.length; j++) {
+              const cid = chunk[j];
+              const p = chunkRes[j];
+              if (!p) {
+                next[cid] = { categoria: null, subcategoria: null };
+                continue;
+              }
+              next[cid] = {
+                categoria: (p as any)?.categoria ?? null,
+                subcategoria: (p as any)?.subcategoria ?? null,
+              };
+            }
+          }
+
+          setCategoryByCanonicalId((prev) => ({ ...prev, ...next }));
+        } catch {
+        }
+      }
+    })();
+  }, [draftItems, categoryByCanonicalId]);
 
   useEffect(() => {
     if (!optimization) return;
@@ -582,24 +729,44 @@ export default function ListDetailScreen() {
 
     setIsFinalizing(true);
     try {
-      await apiPost<{ id: number; receipt_chave_acesso?: string | null }>(
-        '/app/purchases',
-        {
-          local_list_id: listId,
-          list_name: name,
-          status_final: effectiveStatus,
-          finished_at: new Date().toISOString(),
-          receipt_qr_raw: receiptQrRaw.trim() || null,
-          items: draftItems.map((it) => ({
-            canonical_id: it.canonical_id,
-            product_name_snapshot: it.product_name,
-            quantity: it.quantity,
-            unit: 'un',
-            is_checked: Boolean(it.is_checked),
-          })),
-        },
-        { token: tokens.access_token, onRefreshToken: refreshAccessToken }
-      );
+      const checkedItems = draftItems.filter((it) => Boolean(it.is_checked)).length;
+      const payload = {
+        local_list_id: listId,
+        list_name: name,
+        status_final: 'completed',
+        finished_at: new Date().toISOString(),
+        items_total: draftItems.length,
+        items_checked: checkedItems,
+        has_optimization: Boolean(optimization?.allocations?.length),
+        max_stores: Number.isFinite(maxStores) ? Math.min(5, Math.max(1, maxStores)) : 3,
+        stores_count: Array.isArray(optimization?.allocations) ? optimization!.allocations.length : 0,
+        optimized_total: Number.isFinite(kpis.optimizedTotal) ? kpis.optimizedTotal : null,
+        baseline_total: Number.isFinite(kpis.baselineTotal) ? kpis.baselineTotal : null,
+        savings_amount: Number.isFinite(kpis.savings) ? kpis.savings : null,
+        savings_percent: Number.isFinite(kpis.savingsPercent) ? kpis.savingsPercent : null,
+        receipt_qr_raw: receiptQrRaw.trim() || null,
+        ...getClientPurchaseMeta(),
+        items: draftItems.map((it) => ({
+          canonical_id: it.canonical_id,
+          product_name_snapshot: it.product_name,
+          quantity: it.quantity,
+          unit: 'un',
+          is_checked: Boolean(it.is_checked),
+        })),
+      };
+
+      let queued = false;
+      try {
+        await apiPost<{ id: number; receipt_chave_acesso?: string | null }>(
+          '/app/purchases',
+          payload,
+          { token: tokens.access_token, onRefreshToken: refreshAccessToken }
+        );
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Erro ao enviar compra';
+        await enqueuePendingPurchase(payload, message);
+        queued = true;
+      }
 
       await upsertShoppingList({
         id: listId,
@@ -615,10 +782,10 @@ export default function ListDetailScreen() {
       setDraftStatus('completed');
       setHasScanned(false);
       setShowScanner(false);
+      if (queued) {
+        Alert.alert('Compra salva', 'Sem conexão com o servidor agora. Sua compra foi salva e será enviada automaticamente assim que possível.');
+      }
       router.back();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Erro ao finalizar compra';
-      setFinalizeError(message);
     } finally {
       setIsFinalizing(false);
     }
@@ -689,6 +856,21 @@ export default function ListDetailScreen() {
               const key = String(a.store_id);
               const isOpen = Boolean(expandedStoreIds[key]);
               const tone = storeTone(theme, idx);
+
+              const grouped = new Map<string, typeof a.items>();
+              for (const it of a.items) {
+                const cat = categoryLabelFor(it.canonical_id);
+                const list = grouped.get(cat) ?? [];
+                list.push(it);
+                grouped.set(cat, list);
+              }
+
+              const cats = Array.from(grouped.keys()).sort((x, y) => {
+                if (x === 'Sem categoria' && y !== 'Sem categoria') return 1;
+                if (y === 'Sem categoria' && x !== 'Sem categoria') return -1;
+                return x.localeCompare(y, 'pt-BR');
+              });
+
               return (
                 <View key={key} style={[styles.storeBlock, { borderColor: tone.border, backgroundColor: tone.bg }]}>
                   <Pressable
@@ -705,26 +887,54 @@ export default function ListDetailScreen() {
 
                   {isOpen ? (
                     <View style={styles.storeItems}>
-                      {a.items.map((it) => {
-                        const local = draftItems.find((x) => x.canonical_id === it.canonical_id);
-                        const checked = Boolean(local?.is_checked);
+                      {cats.map((cat) => {
+                        const items = grouped.get(cat) ?? [];
+                        const ckey = `store:${key}|cat:${cat}`;
+                        const total = items.length;
+                        const checked = items.filter((x) => Boolean(checkedByCanonicalId[x.canonical_id])).length;
                         return (
-                          <View
-                            key={String(it.canonical_id)}
-                            style={[styles.storeItemRow, { borderColor: tone.itemBorder, backgroundColor: tone.itemBg }]}>
-                            <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
-                              <View style={[styles.checkBox, checked ? styles.checkBoxChecked : null]}>
-                                {checked ? <View style={styles.checkDot} /> : null}
-                              </View>
+                          <View key={ckey} style={{ backgroundColor: 'transparent' }}>
+                            <Pressable
+                              onPress={() => toggleExpanded(ckey)}
+                              style={[styles.categoryHeader, { borderColor: tone.itemBorder, backgroundColor: tone.itemBg }]}
+                            >
+                              <Text style={styles.categoryTitle} numberOfLines={1}>
+                                {cat}
+                              </Text>
+                              <Text style={styles.categoryCount}>
+                                {checked}/{total}
+                              </Text>
                             </Pressable>
-                            <View style={styles.storeItemInfo}>
-                              <Text style={[styles.itemName, checked ? styles.itemNameChecked : null]} numberOfLines={1}>
-                                {it.product_name}
-                              </Text>
-                              <Text style={styles.itemSub} numberOfLines={1}>
-                                Qtd: {it.quantity} • R$ {it.price.toFixed(2)} • Sub: R$ {it.subtotal.toFixed(2)}
-                              </Text>
-                            </View>
+
+                            {isExpanded(ckey)
+                              ? items.map((it) => {
+                                  const checkedIt = Boolean(checkedByCanonicalId[it.canonical_id]);
+                                  return (
+                                    <View
+                                      key={String(it.canonical_id)}
+                                      style={[
+                                        styles.storeItemRow,
+                                        { borderColor: tone.itemBorder, backgroundColor: tone.itemBg },
+                                        styles.categoryItemIndent,
+                                      ]}
+                                    >
+                                      <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                                        <View style={[styles.checkBox, checkedIt ? styles.checkBoxChecked : null]}>
+                                          {checkedIt ? <View style={styles.checkDot} /> : null}
+                                        </View>
+                                      </Pressable>
+                                      <View style={styles.storeItemInfo}>
+                                        <Text style={[styles.itemName, checkedIt ? styles.itemNameChecked : null]} numberOfLines={1}>
+                                          {it.product_name}
+                                        </Text>
+                                        <Text style={styles.itemSub} numberOfLines={1}>
+                                          Qtd: {it.quantity} • R$ {it.price.toFixed(2)} • Sub: R$ {it.subtotal.toFixed(2)}
+                                        </Text>
+                                      </View>
+                                    </View>
+                                  );
+                                })
+                              : null}
                           </View>
                         );
                       })}
@@ -763,29 +973,66 @@ export default function ListDetailScreen() {
               return (
                 <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
                   <Text style={styles.sectionTitle}>Itens fora dos supermercados selecionados</Text>
-                  {items.map(({ it, price }) => (
-                    <View key={String(it.canonical_id)} style={styles.storeItemRow}>
-                      <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
-                        <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
-                          {it.is_checked ? <View style={styles.checkDot} /> : null}
+
+                  {(() => {
+                    const grouped = new Map<string, typeof items>();
+                    for (const row of items) {
+                      const cat = categoryLabelFor(row.it.canonical_id);
+                      const list = grouped.get(cat) ?? [];
+                      list.push(row);
+                      grouped.set(cat, list);
+                    }
+                    const cats = Array.from(grouped.keys()).sort((a, b) => {
+                      if (a === 'Sem categoria' && b !== 'Sem categoria') return 1;
+                      if (b === 'Sem categoria' && a !== 'Sem categoria') return -1;
+                      return a.localeCompare(b, 'pt-BR');
+                    });
+
+                    return cats.map((cat) => {
+                      const ckey = `outside|cat:${cat}`;
+                      const rows = grouped.get(cat) ?? [];
+                      const total = rows.length;
+                      const checked = rows.filter((x) => Boolean(checkedByCanonicalId[x.it.canonical_id])).length;
+                      return (
+                        <View key={ckey} style={{ backgroundColor: 'transparent' }}>
+                          <Pressable onPress={() => toggleExpanded(ckey)} style={styles.categoryHeaderPlain}>
+                            <Text style={styles.categoryTitle} numberOfLines={1}>
+                              {cat}
+                            </Text>
+                            <Text style={styles.categoryCount}>
+                              {checked}/{total}
+                            </Text>
+                          </Pressable>
+                          {isExpanded(ckey)
+                            ? rows.map(({ it, price }) => (
+                                <View key={String(it.canonical_id)} style={[styles.storeItemRow, styles.categoryItemIndent]}> 
+                                  <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                                    <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                                      {it.is_checked ? <View style={styles.checkDot} /> : null}
+                                    </View>
+                                  </Pressable>
+                                  <View style={styles.storeItemInfo}>
+                                    <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                                      {it.product_name}
+                                    </Text>
+                                    {price ? (
+                                      <Text style={styles.itemSub} numberOfLines={1}>
+                                        Qtd: {it.quantity} • R$ {price.price.toFixed(2)} ({price.store_name})
+                                      </Text>
+                                    ) : (
+                                      <Text style={styles.itemSub} numberOfLines={1}>
+                                        Qtd: {it.quantity} • sem preço nos supermercados selecionados
+                                      </Text>
+                                    )}
+                                  </View>
+                                </View>
+                              ))
+                            : null}
                         </View>
-                      </Pressable>
-                      <View style={styles.storeItemInfo}>
-                        <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
-                          {it.product_name}
-                        </Text>
-                        {price ? (
-                          <Text style={styles.itemSub} numberOfLines={1}>
-                            Qtd: {it.quantity} • R$ {price.price.toFixed(2)} ({price.store_name})
-                          </Text>
-                        ) : (
-                          <Text style={styles.itemSub} numberOfLines={1}>
-                            Qtd: {it.quantity} • sem preço nos supermercados selecionados
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  ))}
+                      );
+                    });
+                  })()}
+
                   <Text style={styles.meta}>
                     Dica: aumente a quantidade de supermercados na edição da lista para incluir esses itens na otimização.
                   </Text>
@@ -811,29 +1058,65 @@ export default function ListDetailScreen() {
               return (
                 <View style={{ marginTop: theme.spacing.md, backgroundColor: 'transparent' }}>
                   <Text style={styles.sectionTitle}>Itens sem preço recente (últimos {lookback} dias)</Text>
-                  {items.map(({ it, fallback }) => (
-                    <View key={String(it.canonical_id)} style={styles.storeItemRow}>
-                      <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
-                        <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
-                          {it.is_checked ? <View style={styles.checkDot} /> : null}
+
+                  {(() => {
+                    const grouped = new Map<string, typeof items>();
+                    for (const row of items) {
+                      const cat = categoryLabelFor(row.it.canonical_id);
+                      const list = grouped.get(cat) ?? [];
+                      list.push(row);
+                      grouped.set(cat, list);
+                    }
+                    const cats = Array.from(grouped.keys()).sort((a, b) => {
+                      if (a === 'Sem categoria' && b !== 'Sem categoria') return 1;
+                      if (b === 'Sem categoria' && a !== 'Sem categoria') return -1;
+                      return a.localeCompare(b, 'pt-BR');
+                    });
+
+                    return cats.map((cat) => {
+                      const ckey = `without|cat:${cat}`;
+                      const rows = grouped.get(cat) ?? [];
+                      const total = rows.length;
+                      const checked = rows.filter((x) => Boolean(checkedByCanonicalId[x.it.canonical_id])).length;
+                      return (
+                        <View key={ckey} style={{ backgroundColor: 'transparent' }}>
+                          <Pressable onPress={() => toggleExpanded(ckey)} style={styles.categoryHeaderPlain}>
+                            <Text style={styles.categoryTitle} numberOfLines={1}>
+                              {cat}
+                            </Text>
+                            <Text style={styles.categoryCount}>
+                              {checked}/{total}
+                            </Text>
+                          </Pressable>
+                          {isExpanded(ckey)
+                            ? rows.map(({ it, fallback }) => (
+                                <View key={String(it.canonical_id)} style={[styles.storeItemRow, styles.categoryItemIndent]}>
+                                  <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                                    <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                                      {it.is_checked ? <View style={styles.checkDot} /> : null}
+                                    </View>
+                                  </Pressable>
+                                  <View style={styles.storeItemInfo}>
+                                    <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
+                                      {it.product_name}
+                                    </Text>
+                                    {fallback ? (
+                                      <Text style={styles.itemSub} numberOfLines={1}>
+                                        Qtd: {it.quantity} • R$ {fallback.price.toFixed(2)} ({fallback.store_name})
+                                      </Text>
+                                    ) : (
+                                      <Text style={styles.itemSub} numberOfLines={1}>
+                                        Qtd: {it.quantity} • sem preço
+                                      </Text>
+                                    )}
+                                  </View>
+                                </View>
+                              ))
+                            : null}
                         </View>
-                      </Pressable>
-                      <View style={styles.storeItemInfo}>
-                        <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]} numberOfLines={1}>
-                          {it.product_name}
-                        </Text>
-                        {fallback ? (
-                          <Text style={styles.itemSub} numberOfLines={1}>
-                            Qtd: {it.quantity} • R$ {fallback.price.toFixed(2)} ({fallback.store_name})
-                          </Text>
-                        ) : (
-                          <Text style={styles.itemSub} numberOfLines={1}>
-                            Qtd: {it.quantity} • sem preço
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  ))}
+                      );
+                    });
+                  })()}
                 </View>
               );
             })()}
@@ -882,24 +1165,40 @@ export default function ListDetailScreen() {
           </Card>
 
         <FlatList
-          data={draftItems}
-          keyExtractor={(it) => String(it.canonical_id)}
+          data={draftItems.length ? draftCategoryRows : []}
+          keyExtractor={(row: any) => row.key}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={<Text style={styles.emptyText}>Adicione itens para começar.</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.itemRow}>
-              <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(item.canonical_id)}>
-                <View style={[styles.checkBox, item.is_checked ? styles.checkBoxChecked : null]}>
-                  {item.is_checked ? <View style={styles.checkDot} /> : null}
-                </View>
-              </Pressable>
+          renderItem={({ item }: any) => {
+            if (item.type === 'header') {
+              return (
+                <Pressable onPress={() => toggleExpanded(item.key)} style={styles.categoryHeaderPlain}>
+                  <Text style={styles.categoryTitle} numberOfLines={1}>
+                    {item.category}
+                  </Text>
+                  <Text style={styles.categoryCount}>
+                    {item.checked}/{item.total}
+                  </Text>
+                </Pressable>
+              );
+            }
 
-              <View style={styles.itemInfo}>
-                <Text style={[styles.itemName, item.is_checked ? styles.itemNameChecked : null]}>{item.product_name}</Text>
-                <Text style={styles.itemSub}>Qtd: {item.quantity}</Text>
+            const it = item.item as ShoppingListDraft['items'][number];
+            return (
+              <View style={[styles.itemRow, styles.categoryItemIndent]}> 
+                <Pressable style={styles.checkWrap} onPress={() => toggleItemChecked(it.canonical_id)}>
+                  <View style={[styles.checkBox, it.is_checked ? styles.checkBoxChecked : null]}>
+                    {it.is_checked ? <View style={styles.checkDot} /> : null}
+                  </View>
+                </Pressable>
+
+                <View style={styles.itemInfo}>
+                  <Text style={[styles.itemName, it.is_checked ? styles.itemNameChecked : null]}>{it.product_name}</Text>
+                  <Text style={styles.itemSub}>Qtd: {it.quantity}</Text>
+                </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
         </>
       )}
@@ -1459,6 +1758,43 @@ const makeStyles = (theme: AppTheme) =>
     storeItems: {
       paddingHorizontal: 12,
       paddingVertical: 8,
+    },
+    categoryHeader: {
+      marginTop: 8,
+      borderWidth: 1,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    categoryHeaderPlain: {
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border.subtle,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.bg.surface,
+    },
+    categoryTitle: {
+      fontWeight: '800',
+      color: theme.colors.text.primary,
+      flex: 1,
+      paddingRight: 10,
+      fontSize: 13,
+    },
+    categoryCount: {
+      fontWeight: '800',
+      color: theme.colors.text.muted,
+      fontSize: 12,
+    },
+    categoryItemIndent: {
+      marginLeft: 10,
     },
     bottomBar: {
       position: 'absolute',

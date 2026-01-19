@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-export interface SingleSeriesChartProps {
+export interface MoneySeriesChartProps {
   subtitle: string;
   color: string;
   bgClass: string;
@@ -11,7 +11,12 @@ export interface SingleSeriesChartProps {
   defaultPeriod?: number;
 }
 
-export function SingleSeriesChart({
+function formatMoneyBRL(value: number) {
+  const v = Number(value) || 0;
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+export function MoneySeriesChart({
   subtitle,
   color,
   bgClass,
@@ -19,14 +24,14 @@ export function SingleSeriesChart({
   queryKeyExtra,
   periodOptions = [7, 30, 90],
   defaultPeriod = 30,
-}: SingleSeriesChartProps) {
+}: MoneySeriesChartProps) {
   const gradientId = useId();
   const [period, setPeriod] = useState(defaultPeriod);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number } | null>(null);
 
   const { data: chartData, isLoading, isError } = useQuery({
-    queryKey: ['single-series-chart', subtitle, period, queryKeyExtra],
+    queryKey: ['money-series-chart', subtitle, period, queryKeyExtra],
     queryFn: () => fetcher(period).then((r) => r.data),
   });
 
@@ -35,7 +40,7 @@ export function SingleSeriesChart({
 
   const chartWidth = 640;
   const chartHeight = 210;
-  const padding = { left: 50, right: 30, top: 14, bottom: 38 };
+  const padding = { left: 70, right: 30, top: 14, bottom: 38 };
   const graphWidth = chartWidth - padding.left - padding.right;
   const graphHeight = chartHeight - padding.top - padding.bottom;
 
@@ -94,7 +99,7 @@ export function SingleSeriesChart({
 
     setHoverIndex(bestIdx);
 
-    const tooltipWidth = 190;
+    const tooltipWidth = 240;
     const tooltipHeight = 58;
 
     const clampedLeft = Math.min(Math.max(8, left + 12), rect.width - tooltipWidth - 8);
@@ -133,19 +138,19 @@ export function SingleSeriesChart({
       <div className="grid grid-cols-3 gap-3" style={{ marginBottom: '14px' }}>
         <div className={`${bgClass} rounded-xl`} style={{ padding: '12px' }}>
           <p className="font-bold" style={{ fontSize: '18px', color }}>
-            {chartData?.totals?.value ?? 0}
+            {formatMoneyBRL(chartData?.totals?.value ?? 0)}
           </p>
           <p style={{ fontSize: '11px', color: `${color}B3` }}>Total</p>
         </div>
         <div className={`${bgClass} rounded-xl`} style={{ padding: '12px' }}>
           <p className="font-bold" style={{ fontSize: '18px', color }}>
-            {chartData?.medias?.value ?? 0}
+            {formatMoneyBRL(chartData?.medias?.value ?? 0)}
           </p>
           <p style={{ fontSize: '11px', color: `${color}B3` }}>Média/dia</p>
         </div>
         <div className={`${bgClass} rounded-xl`} style={{ padding: '12px' }}>
           <p className="font-bold" style={{ fontSize: '18px', color }}>
-            {chartData?.max?.value ?? 0}
+            {formatMoneyBRL(chartData?.max?.value ?? 0)}
           </p>
           <p style={{ fontSize: '11px', color: `${color}B3` }}>Pico</p>
         </div>
@@ -185,7 +190,7 @@ export function SingleSeriesChart({
 
             {[100, 75, 50, 25, 0].map((percent) => {
               const y = padding.top + graphHeight - (percent / 100) * graphHeight;
-              const v = Math.round((maxValue * percent) / 100);
+              const v = (maxValue * percent) / 100;
               return (
                 <text
                   key={`y-${percent}`}
@@ -195,7 +200,7 @@ export function SingleSeriesChart({
                   fontSize="10"
                   fill="#6B7280"
                 >
-                  {v}
+                  {formatMoneyBRL(v)}
                 </text>
               );
             })}
@@ -263,13 +268,13 @@ export function SingleSeriesChart({
           {hoverIndex !== null && tooltipPos && displayData[hoverIndex] && (
             <div
               className="absolute z-10 bg-white border border-gray-200 rounded-lg shadow-lg"
-              style={{ left: tooltipPos.left, top: tooltipPos.top, width: '190px', padding: '10px 12px' }}
+              style={{ left: tooltipPos.left, top: tooltipPos.top, width: '240px', padding: '10px 12px' }}
             >
               <div className="text-xs font-semibold text-gray-900">{displayData[hoverIndex].label}</div>
               <div className="mt-1 flex items-center justify-between text-xs">
                 <span className="text-gray-500">Valor</span>
                 <span className="font-semibold" style={{ color }}>
-                  {displayData[hoverIndex].value}
+                  {formatMoneyBRL(displayData[hoverIndex].value)}
                 </span>
               </div>
             </div>
