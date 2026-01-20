@@ -124,6 +124,12 @@ def create_purchase(
     if not data.items:
         raise HTTPException(status_code=400, detail="Informe ao menos 1 item")
 
+    normalized_status = data.status_final
+    if normalized_status not in ("completed", "closed"):
+        normalized_status = "completed"
+
+    chave = extract_chave_from_text(data.receipt_qr_raw) if data.receipt_qr_raw else None
+
     # Idempotência: se já existe compra para (user_id, local_list_id), retorna a existente
     if data.local_list_id:
         existing = (
@@ -132,16 +138,99 @@ def create_purchase(
             .first()
         )
         if existing:
+            if existing.status_final != "closed" or normalized_status == "closed":
+                existing.status_final = normalized_status
+            existing.list_name = data.list_name or existing.list_name
+            existing.finished_at = data.finished_at or existing.finished_at or datetime.now(UTC)
+            if data.receipt_qr_raw and not existing.receipt_qr_raw:
+                existing.receipt_qr_raw = data.receipt_qr_raw
+            if chave:
+                existing.receipt_chave_acesso = chave
+
+            existing.items_total = data.items_total if data.items_total is not None else len(data.items)
+            if data.items_checked is not None:
+                existing.items_checked = data.items_checked
+            if data.has_optimization is not None:
+                existing.has_optimization = data.has_optimization
+            if data.max_stores is not None:
+                existing.max_stores = data.max_stores
+            if data.stores_count is not None:
+                existing.stores_count = data.stores_count
+            if data.optimized_total is not None:
+                existing.optimized_total = data.optimized_total
+            if data.baseline_total is not None:
+                existing.baseline_total = data.baseline_total
+            if data.savings_amount is not None:
+                existing.savings_amount = data.savings_amount
+            if data.savings_percent is not None:
+                existing.savings_percent = data.savings_percent
+
+            if data.client_platform is not None:
+                existing.client_platform = data.client_platform
+            if data.client_app_version is not None:
+                existing.client_app_version = data.client_app_version
+            if data.client_os_version is not None:
+                existing.client_os_version = data.client_os_version
+            if data.client_device_model is not None:
+                existing.client_device_model = data.client_device_model
+            if data.client_locale is not None:
+                existing.client_locale = data.client_locale
+            if data.client_time_zone is not None:
+                existing.client_time_zone = data.client_time_zone
+            if data.client_timezone_offset_min is not None:
+                existing.client_timezone_offset_min = data.client_timezone_offset_min
+
+            db.query(AppPurchaseItem).filter(AppPurchaseItem.purchase_id == existing.id).delete(
+                synchronize_session=False
+            )
+            for it in data.items:
+                db.add(
+                    AppPurchaseItem(
+                        purchase_id=existing.id,
+                        canonical_id=it.canonical_id,
+                        product_name_snapshot=it.product_name_snapshot,
+                        quantity=it.quantity,
+                        unit=it.unit,
+                        is_checked=it.is_checked,
+                    )
+                )
+
+            if chave:
+                receipt_existing = (
+                    db.query(AppReceiptKeySubmission)
+                    .filter(AppReceiptKeySubmission.chave_acesso == chave)
+                    .first()
+                )
+                if receipt_existing:
+                    if receipt_existing.purchase_id is None:
+                        receipt_existing.purchase_id = existing.id
+                    if receipt_existing.user_id != current_user.id:
+                        receipt_existing.user_id = current_user.id
+                    if not receipt_existing.raw_text:
+                        receipt_existing.raw_text = data.receipt_qr_raw
+                else:
+                    db.add(
+                        AppReceiptKeySubmission(
+                            user_id=current_user.id,
+                            purchase_id=existing.id,
+                            chave_acesso=chave,
+                            raw_text=data.receipt_qr_raw,
+                            source="qr",
+                            status="pending",
+                        )
+                    )
+
+            db.commit()
+            db.refresh(existing)
+
             response.status_code = status.HTTP_200_OK
             return PurchaseCreateOut(id=existing.id, receipt_chave_acesso=existing.receipt_chave_acesso)
-
-    chave = extract_chave_from_text(data.receipt_qr_raw) if data.receipt_qr_raw else None
 
     purchase = AppPurchase(
         user_id=current_user.id,
         local_list_id=data.local_list_id,
         list_name=data.list_name,
-        status_final=data.status_final,
+        status_final=normalized_status,
         finished_at=data.finished_at or datetime.now(UTC),
         receipt_qr_raw=data.receipt_qr_raw,
         receipt_chave_acesso=chave,
