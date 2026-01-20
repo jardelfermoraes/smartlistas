@@ -1,6 +1,7 @@
 """SmartListas API - Aplicação principal FastAPI."""
 
 import logging
+import re
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -8,7 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis import Redis
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from sqlalchemy import text
@@ -86,7 +87,18 @@ app = FastAPI(
 
 # Rate limiter
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    response = JSONResponse(status_code=429, content={"detail": "Too Many Requests"})
+    origin = request.headers.get("origin")
+    if origin:
+        if origin in settings.cors_origins or re.match(r"^https://([a-z0-9-]+\.)*smartlistas\.com\.br$", origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+    return response
 
 
 # === Middleware ===

@@ -435,7 +435,7 @@ def get_app_users_chart(request: Request, db: DbSession, days: int = 30):
 
 
 @router.get("/kpis/app-purchases", response_model=AppPurchaseKpisResponse)
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_app_purchases_kpis(
     request: Request,
     db: DbSession,
@@ -519,7 +519,7 @@ def get_app_purchases_kpis(
 
 
 @router.get("/chart/app-savings", response_model=MoneySeriesChartResponse)
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_app_savings_chart(
     request: Request,
     db: DbSession,
@@ -590,7 +590,7 @@ def get_app_savings_chart(
 
 
 @router.get("/chart/app-purchases", response_model=SingleSeriesChartResponse)
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_app_purchases_chart(
     request: Request,
     db: DbSession,
