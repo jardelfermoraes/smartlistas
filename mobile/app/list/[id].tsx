@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/auth';
 import { enqueuePendingPurchase, getClientPurchaseMeta } from '@/lib/purchaseQueue';
 import {
   getShoppingListById,
+  newId,
   ShoppingListDraft,
   ShoppingListFallbackPriceItem,
   ShoppingListOptimizationResult,
@@ -178,7 +179,7 @@ function computeListStatus(base: ShoppingListStatus, items: ShoppingListDraft['i
   if (!items.length) return base;
   const checked = items.filter((it) => Boolean(it.is_checked)).length;
   if (checked === 0) return base;
-  if (checked === items.length) return 'completed';
+  if (checked === items.length) return 'in_progress';
   return 'in_progress';
 }
 
@@ -305,6 +306,8 @@ export default function ListDetailScreen() {
 
   const checkedCount = useMemo(() => draftItems.filter((it) => Boolean(it.is_checked)).length, [draftItems]);
   const hasOptimization = Boolean(optimization?.allocations?.length);
+  const effectiveStatus = useMemo(() => computeListStatus(draftStatus, draftItems), [draftStatus, draftItems]);
+  const isFinalized = draftStatus === 'completed' || draftStatus === 'closed';
 
   const optimizationSets = useMemo(() => {
     const allocations = optimization?.allocations ?? [];
@@ -378,8 +381,6 @@ export default function ListDetailScreen() {
     () => optimizationSignature(draftItems, maxStores),
     [draftItems, maxStores]
   );
-
-  const effectiveStatus = useMemo(() => computeListStatus(draftStatus, draftItems), [draftStatus, draftItems]);
 
   useEffect(() => {
     if (didAutoOptimizeRef.current) return;
@@ -572,6 +573,27 @@ export default function ListDetailScreen() {
     }
   }
 
+  async function repeatPurchase() {
+    const sourceName = listName.trim() || 'Lista';
+    const nextId = newId();
+
+    await upsertShoppingList({
+      id: nextId,
+      name: `${sourceName} (repetir)`,
+      max_stores: maxStores,
+      items: draftItems.map((it) => ({
+        ...it,
+        is_checked: false,
+      })),
+      status: 'draft',
+      optimization: null,
+      created_at: new Date().toISOString(),
+    });
+
+    Alert.alert('Lista criada', 'Criamos uma nova lista baseada na compra anterior.');
+    router.replace(`/list/${nextId}`);
+  }
+
   function addItem() {
     setError(null);
     if (!selected) {
@@ -714,6 +736,11 @@ export default function ListDetailScreen() {
     setFinalizeError(null);
     const name = listName.trim();
 
+    if (isFinalized) {
+      setFinalizeError('Esta lista já foi finalizada. Use “Repetir compra” para criar uma nova lista.');
+      return;
+    }
+
     if (!tokens?.access_token) {
       setFinalizeError('Você precisa estar logado para finalizar a compra');
       return;
@@ -730,6 +757,7 @@ export default function ListDetailScreen() {
     setIsFinalizing(true);
     try {
       const checkedItems = draftItems.filter((it) => Boolean(it.is_checked)).length;
+      const hasOpt = Boolean(optimization?.allocations?.length);
       const payload = {
         local_list_id: listId,
         list_name: name,
@@ -737,13 +765,13 @@ export default function ListDetailScreen() {
         finished_at: new Date().toISOString(),
         items_total: draftItems.length,
         items_checked: checkedItems,
-        has_optimization: Boolean(optimization?.allocations?.length),
+        has_optimization: hasOpt,
         max_stores: Number.isFinite(maxStores) ? Math.min(5, Math.max(1, maxStores)) : 3,
         stores_count: Array.isArray(optimization?.allocations) ? optimization!.allocations.length : 0,
-        optimized_total: Number.isFinite(kpis.optimizedTotal) ? kpis.optimizedTotal : null,
-        baseline_total: Number.isFinite(kpis.baselineTotal) ? kpis.baselineTotal : null,
-        savings_amount: Number.isFinite(kpis.savings) ? kpis.savings : null,
-        savings_percent: Number.isFinite(kpis.savingsPercent) ? kpis.savingsPercent : null,
+        optimized_total: hasOpt && Number.isFinite(kpis.optimizedTotal) ? kpis.optimizedTotal : null,
+        baseline_total: hasOpt && Number.isFinite(kpis.baselineTotal) ? kpis.baselineTotal : null,
+        savings_amount: hasOpt && Number.isFinite(kpis.savings) ? kpis.savings : null,
+        savings_percent: hasOpt && Number.isFinite(kpis.savingsPercent) ? kpis.savingsPercent : null,
         receipt_qr_raw: receiptQrRaw.trim() || null,
         ...getClientPurchaseMeta(),
         items: draftItems.map((it) => ({
@@ -808,9 +836,11 @@ export default function ListDetailScreen() {
                 {hasOptimization ? ' • Otimizada' : ''}
               </Text>
             </View>
-            <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
-              Editar
-            </Button>
+            {isFinalized ? null : (
+              <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
+                Editar
+              </Button>
+            )}
           </View>
 
           <Card style={styles.summaryCard}>
@@ -1137,9 +1167,11 @@ export default function ListDetailScreen() {
                 {hasOptimization ? ' • Otimizada' : ''}
               </Text>
             </View>
-            <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
-              Editar
-            </Button>
+            {isFinalized ? null : (
+              <Button variant="secondary" style={styles.headerIconBtn} onPress={() => setEditVisible(true)}>
+                Editar
+              </Button>
+            )}
           </View>
 
           <Card style={styles.summaryCard}>
@@ -1204,16 +1236,22 @@ export default function ListDetailScreen() {
       )}
 
       <View style={styles.bottomBar}>
-        <Button
-          variant="secondary"
-          onPress={() => {
-            setFinalizeError(null);
-            setShowScanner(false);
-            setFinalizeVisible(true);
-          }}
-          style={styles.bottomBtn}>
-          Finalizar
-        </Button>
+        {isFinalized ? (
+          <Button variant="secondary" onPress={() => void repeatPurchase()} style={styles.bottomBtn}>
+            Repetir compra
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            onPress={() => {
+              setFinalizeError(null);
+              setShowScanner(false);
+              setFinalizeVisible(true);
+            }}
+            style={styles.bottomBtn}>
+            Finalizar
+          </Button>
+        )}
       </View>
 
       <Modal visible={editVisible} transparent animationType="fade" onRequestClose={() => setEditVisible(false)}>
@@ -1235,21 +1273,6 @@ export default function ListDetailScreen() {
                   </Pressable>
                 );
               })}
-            </View>
-
-            <View style={styles.statusRow}>
-              <Text style={styles.statusLabel}>Status</Text>
-              <View style={styles.statusPills}>
-                <Pressable style={[styles.statusPill, draftStatus === 'draft' ? styles.statusPillActive : null]} onPress={() => setDraftStatus('draft')}>
-                  <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusPillTextActive : null]}>Edição</Text>
-                </Pressable>
-                <Pressable style={[styles.statusPill, draftStatus === 'closed' ? styles.statusPillActive : null]} onPress={() => setDraftStatus('closed')}>
-                  <Text style={[styles.statusPillText, draftStatus === 'closed' ? styles.statusPillTextActive : null]}>Fechada</Text>
-                </Pressable>
-                <Pressable style={[styles.statusPill, draftStatus === 'optimized' ? styles.statusPillActive : null]} onPress={() => setDraftStatus('optimized')}>
-                  <Text style={[styles.statusPillText, draftStatus === 'optimized' ? styles.statusPillTextActive : null]}>Otimizada</Text>
-                </Pressable>
-              </View>
             </View>
 
             <Input

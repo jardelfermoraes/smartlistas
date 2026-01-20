@@ -34,6 +34,8 @@ export function KpisCompras() {
     },
   });
 
+  const hasOptimizationData = (kpis?.purchases_with_optimization_count ?? 0) > 0;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -96,7 +98,7 @@ export function KpisCompras() {
                 <span>Economia total</span>
               </div>
               <div className="text-2xl font-semibold text-gray-900 mt-2">
-                {kpisLoading ? '—' : formatMoneyBRL(kpis?.savings_total ?? 0)}
+                {kpisLoading ? '—' : hasOptimizationData ? formatMoneyBRL(kpis?.savings_total ?? 0) : '—'}
               </div>
               <div className="text-xs text-gray-500 mt-1">soma de savings_amount</div>
             </div>
@@ -115,7 +117,7 @@ export function KpisCompras() {
             <div className="p-4 rounded-lg border border-gray-200 bg-white">
               <div className="text-xs text-gray-500">Economia média por compra</div>
               <div className="text-2xl font-semibold text-gray-900 mt-2">
-                {kpisLoading ? '—' : formatMoneyBRL(kpis?.savings_avg_per_purchase ?? 0)}
+                {kpisLoading ? '—' : hasOptimizationData ? formatMoneyBRL(kpis?.savings_avg_per_purchase ?? 0) : '—'}
               </div>
               <div className="text-xs text-gray-500 mt-1">média no período</div>
             </div>
@@ -124,12 +126,12 @@ export function KpisCompras() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div className="p-4 rounded-lg border border-gray-200 bg-white">
               <div className="text-xs text-gray-500">Ticket médio (baseline)</div>
-              <div className="text-xl font-semibold text-gray-900 mt-2">{kpisLoading ? '—' : formatMoneyBRL(kpis?.ticket_avg_baseline ?? 0)}</div>
+              <div className="text-xl font-semibold text-gray-900 mt-2">{kpisLoading ? '—' : hasOptimizationData ? formatMoneyBRL(kpis?.ticket_avg_baseline ?? 0) : '—'}</div>
               <div className="text-xs text-gray-500 mt-1">total antes de otimizar</div>
             </div>
             <div className="p-4 rounded-lg border border-gray-200 bg-white">
               <div className="text-xs text-gray-500">Ticket médio (otimizado)</div>
-              <div className="text-xl font-semibold text-gray-900 mt-2">{kpisLoading ? '—' : formatMoneyBRL(kpis?.ticket_avg_optimized ?? 0)}</div>
+              <div className="text-xl font-semibold text-gray-900 mt-2">{kpisLoading ? '—' : hasOptimizationData ? formatMoneyBRL(kpis?.ticket_avg_optimized ?? 0) : '—'}</div>
               <div className="text-xs text-gray-500 mt-1">total após otimizar</div>
             </div>
             <div className="p-4 rounded-lg border border-gray-200 bg-white">
@@ -139,7 +141,7 @@ export function KpisCompras() {
             </div>
             <div className="p-4 rounded-lg border border-gray-200 bg-white">
               <div className="text-xs text-gray-500">% economia média</div>
-              <div className="text-xl font-semibold text-gray-900 mt-2">{kpisLoading ? '—' : `${(kpis?.savings_percent_avg ?? 0).toFixed(1)}%`}</div>
+              <div className="text-xl font-semibold text-gray-900 mt-2">{kpisLoading ? '—' : hasOptimizationData ? `${(kpis?.savings_percent_avg ?? 0).toFixed(1)}%` : '—'}</div>
               <div className="text-xs text-gray-500 mt-1">savings_percent</div>
             </div>
           </div>
