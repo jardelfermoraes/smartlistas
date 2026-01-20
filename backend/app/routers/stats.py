@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_
 
 from ..database import DbSession
 from ..models import (
@@ -448,6 +448,14 @@ def get_app_purchases_kpis(
     now = datetime.now(UTC)
     start_dt = now - timedelta(days=days)
 
+    opt_expr = or_(
+        AppPurchase.has_optimization == True,
+        AppPurchase.baseline_total.isnot(None),
+        AppPurchase.optimized_total.isnot(None),
+        AppPurchase.savings_amount.isnot(None),
+        AppPurchase.savings_percent.isnot(None),
+    )
+
     q = db.query(AppPurchase).filter(
         AppPurchase.finished_at >= start_dt,
         AppPurchase.finished_at <= now,
@@ -455,12 +463,14 @@ def get_app_purchases_kpis(
     )
 
     if has_optimization is not None:
-        q = q.filter(AppPurchase.has_optimization == has_optimization)
+        if has_optimization:
+            q = q.filter(opt_expr)
+        else:
+            q = q.filter(~opt_expr)
 
     purchases_count = int(q.count())
 
-    q_opt = q
-    purchases_with_optimization_count = int(q_opt.filter(AppPurchase.has_optimization == True).count())
+    purchases_with_optimization_count = int(q.filter(opt_expr).count())
 
     sums = q.with_entities(
         func.coalesce(func.sum(AppPurchase.savings_amount), 0.0).label("savings_total"),
@@ -527,6 +537,14 @@ def get_app_savings_chart(
         dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
         dia_fim = dia_inicio + timedelta(days=1)
 
+        opt_expr = or_(
+            AppPurchase.has_optimization == True,
+            AppPurchase.baseline_total.isnot(None),
+            AppPurchase.optimized_total.isnot(None),
+            AppPurchase.savings_amount.isnot(None),
+            AppPurchase.savings_percent.isnot(None),
+        )
+
         q = db.query(func.coalesce(func.sum(AppPurchase.savings_amount), 0.0)).filter(
             AppPurchase.finished_at >= dia_inicio,
             AppPurchase.finished_at < dia_fim,
@@ -534,7 +552,10 @@ def get_app_savings_chart(
         )
 
         if has_optimization is not None:
-            q = q.filter(AppPurchase.has_optimization == has_optimization)
+            if has_optimization:
+                q = q.filter(opt_expr)
+            else:
+                q = q.filter(~opt_expr)
 
         savings = (
             q
@@ -587,6 +608,14 @@ def get_app_purchases_chart(
         dia_inicio = dia.replace(hour=0, minute=0, second=0, microsecond=0)
         dia_fim = dia_inicio + timedelta(days=1)
 
+        opt_expr = or_(
+            AppPurchase.has_optimization == True,
+            AppPurchase.baseline_total.isnot(None),
+            AppPurchase.optimized_total.isnot(None),
+            AppPurchase.savings_amount.isnot(None),
+            AppPurchase.savings_percent.isnot(None),
+        )
+
         q = db.query(AppPurchase).filter(
             AppPurchase.finished_at >= dia_inicio,
             AppPurchase.finished_at < dia_fim,
@@ -594,7 +623,10 @@ def get_app_purchases_chart(
         )
 
         if has_optimization is not None:
-            q = q.filter(AppPurchase.has_optimization == has_optimization)
+            if has_optimization:
+                q = q.filter(opt_expr)
+            else:
+                q = q.filter(~opt_expr)
 
         count = q.count()
 
