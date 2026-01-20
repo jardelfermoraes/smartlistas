@@ -40,6 +40,24 @@ def upgrade() -> None:
 
     # Unique index for idempotency (local_list_id may be null)
     op.execute(
+        """
+        WITH d AS (
+            SELECT user_id, local_list_id, array_agg(id ORDER BY id) AS ids
+            FROM app_purchases
+            WHERE local_list_id IS NOT NULL
+            GROUP BY user_id, local_list_id
+            HAVING COUNT(*) > 1
+        ), to_fix AS (
+            SELECT unnest(ids[2:array_length(ids, 1)]) AS id
+            FROM d
+        )
+        UPDATE app_purchases p
+        SET local_list_id = NULL
+        FROM to_fix f
+        WHERE p.id = f.id
+        """
+    )
+    op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_app_purchases_user_local_list "
         "ON app_purchases (user_id, local_list_id) "
         "WHERE local_list_id IS NOT NULL"
