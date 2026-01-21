@@ -58,6 +58,20 @@ function getApiBaseUrl(): string {
 
 export const API_BASE_URL = getApiBaseUrl();
 
+function defaultHeaders(): Record<string, string> {
+  const base: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  // React Native's networking stack may fail when servers/CDNs respond with unsupported encodings (e.g. br).
+  // Request identity to keep responses readable across Android/iOS.
+  if (Platform.OS !== 'web') {
+    base['Accept-Encoding'] = 'identity';
+  }
+
+  return base;
+}
+
 function normalizePath(path: string): string {
   const trimmed = (path ?? '').trim();
   if (!trimmed) return '/';
@@ -135,6 +149,7 @@ export async function apiGet<TResponse>(
       {
       method: 'GET',
       headers: {
+        ...defaultHeaders(),
         ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
         ...(options?.headers ?? null),
       },
@@ -168,6 +183,7 @@ export async function apiDelete(path: string, options?: RequestOptions): Promise
       {
       method: 'DELETE',
       headers: {
+        ...defaultHeaders(),
         ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
         ...(options?.headers ?? null),
       },
@@ -200,6 +216,7 @@ export async function apiPut<TResponse>(path: string, body: unknown, options?: R
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
+        ...defaultHeaders(),
         ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
         ...(options?.headers ?? null),
       },
@@ -235,6 +252,7 @@ export async function apiPost<TResponse>(path: string, body: unknown, options?: 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...defaultHeaders(),
         ...(options?.token ? { Authorization: `Bearer ${options.token}` } : null),
         ...(options?.headers ?? null),
       },
