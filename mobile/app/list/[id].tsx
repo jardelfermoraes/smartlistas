@@ -523,7 +523,7 @@ export default function ListDetailScreen() {
     const t = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await apiGet<CanonicalListResponse>('/canonical', { search: q, page: 1, page_size: 8 });
+        const res = await apiGet<CanonicalListResponse>('/canonical/', { search: q, page: 1, page_size: 8 });
         const ranked = (res.items ?? [])
           .map((it) => ({ it, score: suggestionScore(it, q) }))
           .filter((x) => x.score > 0)
