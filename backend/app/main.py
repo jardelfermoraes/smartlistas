@@ -92,13 +92,7 @@ app.state.limiter = limiter
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
     response = JSONResponse(status_code=429, content={"detail": "Too Many Requests"})
-    origin = request.headers.get("origin")
-    if origin:
-        if origin in settings.cors_origins or re.match(r"^https://([a-z0-9-]+\.)*smartlistas\.com\.br$", origin):
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Vary"] = "Origin"
-    return response
+    return apply_cors_headers(request, response)
 
 
 # === Middleware ===
@@ -116,11 +110,21 @@ app.add_middleware(
 # === Exception Handlers ===
 
 
+def apply_cors_headers(request: Request, response: JSONResponse) -> JSONResponse:
+    origin = request.headers.get("origin")
+    if origin:
+        if origin in settings.cors_origins or re.match(r"^https://([a-z0-9-]+\.)*smartlistas\.com\.br$", origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+    return response
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Handler global para exceções não tratadas."""
     logger.exception(f"Erro não tratado: {exc}")
-    return JSONResponse(
+    response = JSONResponse(
         status_code=500,
         content={
             "detail": "Erro interno do servidor"
@@ -128,6 +132,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
             else str(exc)
         },
     )
+    return apply_cors_headers(request, response)
 
 
 # === Routers ===
