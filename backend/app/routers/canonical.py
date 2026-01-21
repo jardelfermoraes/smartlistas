@@ -17,7 +17,19 @@ from ..services.product_normalizer import normalize_existing_products
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
+
+
+def rate_limit_key(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip")
+    if xri:
+        return xri.strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=rate_limit_key)
 
 
 # === Schemas ===
@@ -139,7 +151,7 @@ class CanonicalKpisOut(BaseModel):
 # === Endpoints ===
 
 @router.get("/", response_model=CanonicalListResponse)
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def list_canonical_products(
     request: Request,
     db: DbSession,
@@ -219,7 +231,7 @@ def list_canonical_products(
 
 
 @router.get("/categories")
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def list_categories(request: Request, db: DbSession):
     """Lista todas as categorias disponíveis."""
     categories = db.query(CanonicalProduct.categoria).filter(
@@ -229,7 +241,7 @@ def list_categories(request: Request, db: DbSession):
 
 
 @router.post("/categories/by-ids", response_model=List[CanonicalCategoryOut])
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_categories_by_ids(request: Request, db: DbSession, data: CanonicalIdsIn):
     ids = [int(x) for x in (data.ids or []) if isinstance(x, (int, float, str)) and str(x).strip().isdigit()]
     if not ids:
@@ -248,7 +260,7 @@ def get_categories_by_ids(request: Request, db: DbSession, data: CanonicalIdsIn)
 
 
 @router.get("/kpis", response_model=CanonicalKpisOut)
-@limiter.limit("60/minute")
+@limiter.limit("120/minute")
 def canonical_kpis(request: Request, db: DbSession):
     total_products = db.query(func.count(CanonicalProduct.id)).scalar() or 0
 
@@ -329,7 +341,7 @@ def merge_duplicates(request: Request, db: DbSession):
 
 
 @router.get("/{canonical_id}", response_model=CanonicalProductOut)
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_canonical_product(request: Request, canonical_id: int, db: DbSession):
     """Obtém detalhes de um produto canônico."""
     product = db.get(CanonicalProduct, canonical_id)
@@ -352,7 +364,7 @@ def get_canonical_product(request: Request, canonical_id: int, db: DbSession):
 
 
 @router.get("/{canonical_id}/details", response_model=ProductDetailOut)
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_canonical_product_details(request: Request, canonical_id: int, db: DbSession):
     """Obtém detalhes completos de um produto canônico com aliases e preços."""
     product = db.get(CanonicalProduct, canonical_id)
@@ -417,7 +429,7 @@ def get_canonical_product_details(request: Request, canonical_id: int, db: DbSes
 
 
 @router.get("/{canonical_id}/aliases", response_model=List[AliasOut])
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_product_aliases(request: Request, canonical_id: int, db: DbSession):
     """Lista aliases de um produto canônico."""
     aliases = db.query(ProductAlias).filter(ProductAlias.canonical_id == canonical_id).all()
@@ -441,7 +453,7 @@ def get_product_aliases(request: Request, canonical_id: int, db: DbSession):
 
 
 @router.get("/{canonical_id}/prices", response_model=List[PriceComparisonOut])
-@limiter.limit("60/minute")
+@limiter.limit("300/minute")
 def get_product_prices(request: Request, canonical_id: int, db: DbSession):
     """Obtém preços de um produto canônico em diferentes lojas."""
     # Busca o preço mais recente de cada loja
